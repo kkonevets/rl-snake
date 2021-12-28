@@ -12,12 +12,10 @@ class Color:
 
 
 class Snake:
-    head = [100, 50]
-    body = [head]
-    direction = pygame.K_RIGHT
-
-    def __init__(self, key):
-        self.direction = key
+    def __init__(self, head, direction):
+        self.head = head
+        self.body = [head]
+        self.direction = direction
 
     def move(self, key, env):
         if (key == pygame.K_UP and self.direction != pygame.K_DOWN) or (
@@ -51,18 +49,13 @@ class Snake:
 
 
 class Environment:
-    # Window size
-    frame_size_x = 0
-    frame_size_y = 0
-
-    food_pos = [0, 0]  # food position
-    score = 0
-
     def __init__(self, frame_size_x=350, frame_size_y=350):
+        # Window size
         self.frame_size_x = frame_size_x
         self.frame_size_y = frame_size_y
 
-        self.food_pos = self.gen_food()
+        self.food_pos = self.gen_food()  # food position
+        self.score = 0
 
         # Checks for errors encountered
         check_errors = pygame.init()
@@ -94,7 +87,7 @@ class Environment:
         return True
 
 
-def game_over(game):
+def game_over():
     "Game Over"
     pygame.quit()
     sys.exit()
@@ -122,7 +115,7 @@ if __name__ == "__main__":
     fps_controller = pygame.time.Clock()
 
     key = pygame.K_RIGHT
-    snake = Snake(key)
+    snake = Snake([100, 50], key)
 
     # Main logic
     while True:
@@ -135,7 +128,7 @@ if __name__ == "__main__":
 
         # Game Over conditions
         if not env.check_borders(snake):
-            game_over(game)
+            game_over()
 
         # GFX
         game.fill(Color.BLACK)
