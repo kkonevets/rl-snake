@@ -1,6 +1,7 @@
 import pygame
 import sys
 import random
+import numpy as np
 
 
 class Color:
@@ -17,27 +18,25 @@ class Snake:
         self.body = [head]
         self.direction = direction
 
+    def _move_head(self, key, key1, key2):
+        if (key == key1 and self.direction != key2) or (
+            key == key2 and self.direction == key1
+        ):
+            self.direction = key1
+            if key1 == pygame.K_UP:
+                self.head[1] -= 10
+            elif key1 == pygame.K_LEFT:
+                self.head[0] -= 10
+            elif key1 == pygame.K_DOWN:
+                self.head[1] += 10
+            elif key1 == pygame.K_RIGHT:
+                self.head[0] += 10
+
     def move(self, key, env):
-        if (key == pygame.K_UP and self.direction != pygame.K_DOWN) or (
-            key == pygame.K_DOWN and self.direction == pygame.K_UP
-        ):
-            self.direction = pygame.K_UP
-            self.head[1] -= 10
-        elif (key == pygame.K_DOWN and self.direction != pygame.K_UP) or (
-            key == pygame.K_UP and self.direction == pygame.K_DOWN
-        ):
-            self.direction = pygame.K_DOWN
-            self.head[1] += 10
-        elif (key == pygame.K_LEFT and self.direction != pygame.K_RIGHT) or (
-            key == pygame.K_RIGHT and self.direction == pygame.K_LEFT
-        ):
-            self.direction = pygame.K_LEFT
-            self.head[0] -= 10
-        elif (key == pygame.K_RIGHT and self.direction != pygame.K_LEFT) or (
-            key == pygame.K_LEFT and self.direction == pygame.K_RIGHT
-        ):
-            self.direction = pygame.K_RIGHT
-            self.head[0] += 10
+        self._move_head(key, pygame.K_UP, pygame.K_DOWN)
+        self._move_head(key, pygame.K_DOWN, pygame.K_UP)
+        self._move_head(key, pygame.K_LEFT, pygame.K_RIGHT)
+        self._move_head(key, pygame.K_RIGHT, pygame.K_LEFT)
 
         # Snake body growing mechanism
         snake.body.insert(0, list(snake.head))
@@ -67,6 +66,75 @@ class Environment:
             sys.exit(-1)
         else:
             print("[+] Game successfully initialised")
+
+    def get_state(self, snake: Snake):
+        """
+        Return the state.
+        The state is a numpy array of 11 values, representing:
+            - Danger 1 OR 2 steps ahead
+            - Danger 1 OR 2 steps on the left
+            - Danger 1 OR 2 steps on the right
+            - Snake is moving left
+            - Snake is moving right
+            - Snake is moving up
+            - Snake is moving down
+            - The food is on the left
+            - The food is on the right
+            - The food is on the upper side
+            - The food is on the lower side
+        """
+        state = np.zeros(11)
+        x, y = snake.head
+
+        if snake.direction == pygame.K_LEFT:
+            if x < 20:
+                state[0] = 1
+            if y > self.frame_size_y - 30:
+                state[1] = 1
+            if y < 20:
+                state[2] = 1
+        elif snake.direction == pygame.K_RIGHT:
+            if x > self.frame_size_x - 30:
+                state[0] = 1
+            if y < 20:
+                state[1] = 1
+            if y > self.frame_size_y - 30:
+                state[2] = 1
+        elif snake.direction == pygame.K_UP:
+            if y < 20:
+                state[0] = 1
+            if x < 20:
+                state[1] = 1
+            if x > self.frame_size_x - 30:
+                state[2] = 1
+        elif snake.direction == pygame.K_DOWN:
+            if y > self.frame_size_y - 30:
+                state[0] = 1
+            if x > self.frame_size_x - 30:
+                state[1] = 1
+            if x < 20:
+                state[2] = 1
+
+        state[3] = snake.direction == pygame.K_LEFT
+        state[4] = snake.direction == pygame.K_RIGHT
+        state[5] = snake.direction == pygame.K_UP
+        state[6] = snake.direction == pygame.K_DOWN
+        state[7] = self.food_pos[0] < x
+        state[8] = self.food_pos[0] > x
+        state[9] = self.food_pos[1] < y
+        state[10] = self.food_pos[1] > y
+
+        def set_bit(value, bit):
+            return value | (1 << bit)
+
+        def state_hash(state):
+            state_hash = 0
+            for i, b in enumerate(state):
+                if b:
+                    state_hash = set_bit(state_hash, i)
+            return state_hash
+
+        return state, state_hash(state)
 
     def gen_food(self):
         "Generate food"
@@ -115,7 +183,7 @@ if __name__ == "__main__":
     fps_controller = pygame.time.Clock()
 
     key = pygame.K_RIGHT
-    snake = Snake([100, 50], key)
+    snake = Snake([100, 100], key)
 
     # Main logic
     while True:
