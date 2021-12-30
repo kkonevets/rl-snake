@@ -3,6 +3,8 @@ import sys
 import random
 import numpy as np
 
+BRICK = 15  # size of unit snake element
+
 
 class Color:
     "Colors (R, G, B)"
@@ -13,36 +15,35 @@ class Color:
 
 
 class Snake:
-    def __init__(self, head, direction):
+    def __init__(self, head):
         self.head = head
         self.body = [head]
-        self.direction = direction
-
-    def _move_head(self, key, key1, key2):
-        if (key == key1 and self.direction != key2) or (
-            key == key2 and self.direction == key1
-        ):
-            self.direction = key1
-            if key1 == pygame.K_UP:
-                self.head[1] -= 10
-            elif key1 == pygame.K_LEFT:
-                self.head[0] -= 10
-            elif key1 == pygame.K_DOWN:
-                self.head[1] += 10
-            elif key1 == pygame.K_RIGHT:
-                self.head[0] += 10
+        self.direction = -1
 
     def move(self, key, env):
-        self._move_head(key, pygame.K_UP, pygame.K_DOWN)
-        self._move_head(key, pygame.K_DOWN, pygame.K_UP)
-        self._move_head(key, pygame.K_LEFT, pygame.K_RIGHT)
-        self._move_head(key, pygame.K_RIGHT, pygame.K_LEFT)
+        if sorted((key, self.direction)) in (
+            [pygame.K_DOWN, pygame.K_UP],
+            [pygame.K_RIGHT, pygame.K_LEFT],
+        ):
+            return
+
+        self.direction = key
+        if key == pygame.K_UP:
+            self.head[1] -= BRICK
+        elif key == pygame.K_LEFT:
+            self.head[0] -= BRICK
+        elif key == pygame.K_DOWN:
+            self.head[1] += BRICK
+        elif key == pygame.K_RIGHT:
+            self.head[0] += BRICK
 
         # Snake body growing mechanism
         snake.body.insert(0, list(snake.head))
         if snake.head == env.food_pos:
             env.score += 1
             env.food_pos = env.gen_food()
+            while env.food_pos in self.body:
+                env.food_pos = env.gen_food()
         else:
             snake.body.pop()
 
@@ -87,32 +88,32 @@ class Environment:
         x, y = snake.head
 
         if snake.direction == pygame.K_LEFT:
-            if x < 20:
+            if x < 2 * BRICK:
                 state[0] = 1
-            if y > self.frame_size_y - 30:
+            if y > self.frame_size_y - 3 * BRICK:
                 state[1] = 1
-            if y < 20:
+            if y < 2 * BRICK:
                 state[2] = 1
         elif snake.direction == pygame.K_RIGHT:
-            if x > self.frame_size_x - 30:
+            if x > self.frame_size_x - 3 * BRICK:
                 state[0] = 1
-            if y < 20:
+            if y < 2 * BRICK:
                 state[1] = 1
-            if y > self.frame_size_y - 30:
+            if y > self.frame_size_y - 3 * BRICK:
                 state[2] = 1
         elif snake.direction == pygame.K_UP:
-            if y < 20:
+            if y < 2 * BRICK:
                 state[0] = 1
-            if x < 20:
+            if x < 2 * BRICK:
                 state[1] = 1
-            if x > self.frame_size_x - 30:
+            if x > self.frame_size_x - 3 * BRICK:
                 state[2] = 1
         elif snake.direction == pygame.K_DOWN:
-            if y > self.frame_size_y - 30:
+            if y > self.frame_size_y - 3 * BRICK:
                 state[0] = 1
-            if x > self.frame_size_x - 30:
+            if x > self.frame_size_x - 3 * BRICK:
                 state[1] = 1
-            if x < 20:
+            if x < 2 * BRICK:
                 state[2] = 1
 
         state[3] = snake.direction == pygame.K_LEFT
@@ -139,16 +140,16 @@ class Environment:
     def gen_food(self):
         "Generate food"
         return [
-            random.randrange(1, (self.frame_size_x // 10)) * 10,
-            random.randrange(1, (self.frame_size_y // 10)) * 10,
+            random.randrange(1, (self.frame_size_x // BRICK)) * BRICK,
+            random.randrange(1, (self.frame_size_y // BRICK)) * BRICK,
         ]
 
     def check_borders(self, snake: Snake):
         if (
             snake.head[0] < 0
-            or snake.head[0] > self.frame_size_x - 10
+            or snake.head[0] > self.frame_size_x - BRICK
             or snake.head[1] < 0
-            or snake.head[1] > self.frame_size_y - 10
+            or snake.head[1] > self.frame_size_y - BRICK
             or snake.head in snake.body[1:]  # Snake self intersection
         ):
             return False
@@ -168,29 +169,55 @@ def show_score(game, score):
     )
     score_rect = score_surface.get_rect()
     frame_size_x, frame_size_y = game.get_size()
-    score_rect.midtop = (frame_size_x / 2, frame_size_y / 1.05)
+    score_rect.midtop = (frame_size_x / 2, frame_size_y / 1.1)
     game.blit(score_surface, score_rect)
 
 
+def plot_game(game, env, snake):
+    # GFX
+    game.fill(Color.BLACK)
+    for pos in snake.body:
+        # .draw.rect(play_surface, color, xy-coordinate)
+        # xy-coordinate -> .Rect(x, y, size_x, size_y)
+        pygame.draw.rect(
+            game, Color.GREEN, pygame.Rect(pos[0], pos[1], BRICK, BRICK), 1
+        )
+
+    # Snake food
+    pygame.draw.rect(
+        game,
+        Color.RED,
+        pygame.Rect(env.food_pos[0], env.food_pos[1], BRICK, BRICK),
+    )
+
+    show_score(game, env.score)
+    # Refresh game screen
+    pygame.display.update()
+
+
 if __name__ == "__main__":
-    env = Environment(350, 350)
+    env = Environment(20 * BRICK, 20 * BRICK)
 
     # Initialise game window
-    pygame.display.set_caption("Snake Eater")
+    pygame.display.set_caption("Snake")
     game = pygame.display.set_mode((env.frame_size_x, env.frame_size_y))
 
-    # frames per second controller
-    fps_controller = pygame.time.Clock()
+    key = None
+    snake = Snake([5 * BRICK, 5 * BRICK])
 
-    key = pygame.K_RIGHT
-    snake = Snake([100, 100], key)
+    plot_game(game, env, snake)
 
     # Main logic
     while True:
-        for event in pygame.event.get():
-            # Whenever a key is pressed down
-            if event.type == pygame.KEYDOWN:
+        event = pygame.event.wait()
+        # Whenever a key is pressed down
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_q:
+                game_over()
+            else:
                 key = event.key
+        else:
+            continue
 
         snake.move(key, env)
 
@@ -198,24 +225,4 @@ if __name__ == "__main__":
         if not env.check_borders(snake):
             game_over()
 
-        # GFX
-        game.fill(Color.BLACK)
-        for pos in snake.body:
-            # .draw.rect(play_surface, color, xy-coordinate)
-            # xy-coordinate -> .Rect(x, y, size_x, size_y)
-            pygame.draw.rect(
-                game, Color.GREEN, pygame.Rect(pos[0], pos[1], 10, 10), 1
-            )
-
-        # Snake food
-        pygame.draw.rect(
-            game,
-            Color.RED,
-            pygame.Rect(env.food_pos[0], env.food_pos[1], 10, 10),
-        )
-
-        show_score(game, env.score)
-        # Refresh game screen
-        pygame.display.update()
-        # Refresh rate
-        fps_controller.tick(10)
+        plot_game(game, env, snake)
