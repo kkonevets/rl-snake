@@ -15,15 +15,23 @@ class Color:
 
 
 class Snake:
-    def __init__(self, head):
-        self.head = head
-        self.body = [head]
-        self.direction = -1
+    def __init__(self):
+        self.head = env.gen_point()
+        self.body = [self.head]
+        # get random direction: LEFT, RIGHT, UP, DOWN
+        self.direction = random.randrange(pygame.K_RIGHT, pygame.K_UP + 1)
+
+    def l1(self, food_pos):
+        "return L1 distance to a food point"
+        dist = abs(self.head[0] - food_pos[0]) + abs(
+            self.head[1] - food_pos[1]
+        )
+        return int(dist / BRICK)
 
     def move(self, key, env):
         if sorted((key, self.direction)) in (
-            [pygame.K_DOWN, pygame.K_UP],
             [pygame.K_RIGHT, pygame.K_LEFT],
+            [pygame.K_DOWN, pygame.K_UP],
         ):
             return
 
@@ -41,9 +49,9 @@ class Snake:
         snake.body.insert(0, list(snake.head))
         if snake.head == env.food_pos:
             env.score += 1
-            env.food_pos = env.gen_food()
+            env.food_pos = env.gen_point()
             while env.food_pos in self.body:
-                env.food_pos = env.gen_food()
+                env.food_pos = env.gen_point()
         else:
             snake.body.pop()
 
@@ -54,8 +62,19 @@ class Environment:
         self.frame_size_x = frame_size_x
         self.frame_size_y = frame_size_y
 
-        self.food_pos = self.gen_food()  # food position
+        self.food_pos = self.gen_point()  # food position
         self.score = 0
+
+        def highest_bit(num):
+            r = 0
+            while num:
+                num >>= 1
+                r += 1
+            return r
+
+        # maximum distance between points
+        max_dist = int((frame_size_x + frame_size_y) / BRICK) - 2
+        self.highest_bit = highest_bit(max_dist)
 
         # Checks for errors encountered
         check_errors = pygame.init()
@@ -70,8 +89,9 @@ class Environment:
 
     def get_state(self, snake: Snake):
         """
-        Return the state.
-        The state is a numpy array of 11 values, representing:
+        The state is a set of (12 + maximum_L1_distance) bits,
+        representing:
+            - Leading 1 (auxiliary bit)
             - Danger 1 OR 2 steps ahead
             - Danger 1 OR 2 steps on the left
             - Danger 1 OR 2 steps on the right
@@ -83,8 +103,10 @@ class Environment:
             - The food is on the right
             - The food is on the upper side
             - The food is on the lower side
+            - The rest of bits is a distances to a food
         """
-        state = np.zeros(11)
+
+        state = np.zeros(11, dtype="I")
         x, y = snake.head
 
         if snake.direction == pygame.K_LEFT:
@@ -125,20 +147,17 @@ class Environment:
         state[9] = self.food_pos[1] < y
         state[10] = self.food_pos[1] > y
 
-        def set_bit(value, bit):
-            return value | (1 << bit)
+        shash = 1 << state.size
+        for i, b in enumerate(state[::-1]):
+            if b:
+                shash |= 1 << i  # set i-th bit
 
-        def state_hash(state):
-            state_hash = 0
-            for i, b in enumerate(state):
-                if b:
-                    state_hash = set_bit(state_hash, i)
-            return state_hash
+        print("{0:b}".format(shash), state, snake.direction)
 
-        return state, state_hash(state)
+        return (shash << self.highest_bit) | snake.l1(self.food_pos)
 
-    def gen_food(self):
-        "Generate food"
+    def gen_point(self):
+        "Generate random point"
         return [
             random.randrange(1, (self.frame_size_x // BRICK)) * BRICK,
             random.randrange(1, (self.frame_size_y // BRICK)) * BRICK,
@@ -203,7 +222,10 @@ if __name__ == "__main__":
     game = pygame.display.set_mode((env.frame_size_x, env.frame_size_y))
 
     key = None
-    snake = Snake([5 * BRICK, 5 * BRICK])
+    snake = Snake()
+
+    print("INIT")
+    print("{0:b}".format(env.get_state(snake)))
 
     plot_game(game, env, snake)
 
@@ -211,11 +233,15 @@ if __name__ == "__main__":
     while True:
         event = pygame.event.wait()
         # Whenever a key is pressed down
-        if event.type == pygame.KEYDOWN:
+        if event.type == pygame.QUIT:
+            game_over()
+        elif event.type == pygame.KEYDOWN:
             if event.key == pygame.K_q:
                 game_over()
-            else:
+            elif pygame.K_RIGHT <= event.key <= pygame.K_UP:
                 key = event.key
+            else:
+                continue
         else:
             continue
 
@@ -226,3 +252,4 @@ if __name__ == "__main__":
             game_over()
 
         plot_game(game, env, snake)
+        print("{0:b}".format(env.get_state(snake)))
