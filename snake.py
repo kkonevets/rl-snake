@@ -22,7 +22,7 @@ class Snake:
         self.direction = random.randrange(pygame.K_RIGHT, pygame.K_UP + 1)
 
     def l1(self, food_pos):
-        "return L1 distance to a food point"
+        "Return L1 distance to a food point"
         dist = abs(self.head[0] - food_pos[0]) + abs(
             self.head[1] - food_pos[1]
         )
@@ -56,6 +56,10 @@ class Snake:
             snake.body.pop()
 
 
+def isKthBitSet(n, k) -> bool:
+    return n & (1 << (k - 1))
+
+
 class Environment:
     def __init__(self, frame_size_x=350, frame_size_y=350):
         # Window size
@@ -75,6 +79,8 @@ class Environment:
         # maximum distance between points
         max_dist = int((frame_size_x + frame_size_y) / BRICK) - 2
         self.highest_bit = highest_bit(max_dist)
+
+        self.state_size = 12 + self.highest_bit
 
         # Checks for errors encountered
         check_errors = pygame.init()
@@ -174,6 +180,73 @@ class Environment:
             return False
         return True
 
+    def get_food_dist(state):
+        return state & ((1 << 6) - 1)
+
+    def direction(self, state):
+        if isKthBitSet(state, self.state_size - 4):
+            return pygame.K_LEFT
+        elif isKthBitSet(state, self.state_size - 5):
+            return pygame.K_RIGHT
+        elif isKthBitSet(state, self.state_size - 6):
+            return pygame.K_UP
+        elif isKthBitSet(state, self.state_size - 7):
+            return pygame.K_DOWN
+        else:
+            raise NotImplemented
+
+    def direction_neigbs(direction):
+        if direction == pygame.K_UP:
+            return pygame.K_LEFT, pygame.K_RIGHT
+        elif direction == pygame.K_RIGHT:
+            return pygame.K_UP, pygame.K_DOWN
+        elif direction == pygame.K_DOWN:
+            return pygame.K_RIGHT, pygame.K_LEFT
+        elif direction == pygame.K_LEFT:
+            return pygame.K_DOWN, pygame.K_UP
+        else:
+            raise NotImplemented
+
+    def reward(self, state, action):
+        direction = self.direction(state)
+        dneigbs = Environment.direction_neigbs(direction)
+
+        if (  # danger ahead
+            isKthBitSet(state, self.state_size - 1) and action == direction
+        ):
+            return -1
+        elif (  # danger left
+            isKthBitSet(state, self.state_size - 2) and action == dneigbs[0]
+        ):
+            return -1
+        elif (  # danger right
+            isKthBitSet(state, self.state_size - 3) and action == dneigbs[1]
+        ):
+            return -1
+        elif Environment.get_food_dist(state) == 1:  # one step to a food
+            if (  # food down
+                isKthBitSet(state, self.state_size - 11)
+                and action == pygame.K_DOWN
+            ):
+                return 1
+            elif (  # food up
+                isKthBitSet(state, self.state_size - 10)
+                and action == pygame.K_UP
+            ):
+                return 1
+            elif (  # food left
+                isKthBitSet(state, self.state_size - 8)
+                and action == pygame.K_LEFT
+            ):
+                return 1
+            elif (  # food right
+                isKthBitSet(state, self.state_size - 9)
+                and action == pygame.K_RIGHT
+            ):
+                return 1
+
+        return 0
+
 
 def game_over():
     "Game Over"
@@ -256,4 +329,12 @@ if __name__ == "__main__":
             game_over()
 
         plot_game(game, env, snake)
-        print("{0:b}".format(env.get_state(snake)))
+
+        state = env.get_state(snake)
+        print(
+            "{0:b}".format(state),
+            env.reward(state, pygame.K_LEFT),
+            env.reward(state, pygame.K_RIGHT),
+            env.reward(state, pygame.K_UP),
+            env.reward(state, pygame.K_DOWN),
+        )
