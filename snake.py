@@ -92,9 +92,9 @@ class Environment:
         The state is a set of (12 + maximum_L1_distance) bits,
         representing:
             - Leading 1 (auxiliary bit)
-            - Danger 1 OR 2 steps ahead
-            - Danger 1 OR 2 steps on the left
-            - Danger 1 OR 2 steps on the right
+            - Danger one step ahead
+            - Danger on the left
+            - Danger on the right
             - Snake is moving left
             - Snake is moving right
             - Snake is moving up
@@ -110,32 +110,32 @@ class Environment:
         x, y = snake.head
 
         if snake.direction == pygame.K_LEFT:
-            if x < 2 * BRICK:
+            if x < BRICK:
                 state[0] = 1
-            if y > self.frame_size_y - 3 * BRICK:
+            if y > self.frame_size_y - 2 * BRICK:
                 state[1] = 1
-            if y < 2 * BRICK:
+            if y < BRICK:
                 state[2] = 1
         elif snake.direction == pygame.K_RIGHT:
-            if x > self.frame_size_x - 3 * BRICK:
+            if x > self.frame_size_x - 2 * BRICK:
                 state[0] = 1
-            if y < 2 * BRICK:
+            if y < BRICK:
                 state[1] = 1
-            if y > self.frame_size_y - 3 * BRICK:
+            if y > self.frame_size_y - 2 * BRICK:
                 state[2] = 1
         elif snake.direction == pygame.K_UP:
-            if y < 2 * BRICK:
+            if y < BRICK:
                 state[0] = 1
-            if x < 2 * BRICK:
+            if x < BRICK:
                 state[1] = 1
-            if x > self.frame_size_x - 3 * BRICK:
+            if x > self.frame_size_x - 2 * BRICK:
                 state[2] = 1
         elif snake.direction == pygame.K_DOWN:
-            if y > self.frame_size_y - 3 * BRICK:
+            if y > self.frame_size_y - 2 * BRICK:
                 state[0] = 1
-            if x > self.frame_size_x - 3 * BRICK:
+            if x > self.frame_size_x - 2 * BRICK:
                 state[1] = 1
-            if x < 2 * BRICK:
+            if x < BRICK:
                 state[2] = 1
 
         state[3] = snake.direction == pygame.K_LEFT
