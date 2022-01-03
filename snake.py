@@ -195,11 +195,15 @@ def show_score(game, score):
 def plot_game(game, env, snake):
     # GFX
     game.fill(Color.BLACK)
-    for pos in snake.body:
-        # .draw.rect(play_surface, color, xy-coordinate)
-        # xy-coordinate -> .Rect(x, y, size_x, size_y)
+
+    pygame.draw.rect(
+        game,
+        Color.WHITE,
+        pygame.Rect(snake.head[0], snake.head[1], BRICK, BRICK),
+    )
+    for pos in snake.body[1:]:
         pygame.draw.rect(
-            game, Color.GREEN, pygame.Rect(pos[0], pos[1], BRICK, BRICK), 1
+            game, Color.GREEN, pygame.Rect(pos[0], pos[1], BRICK, BRICK)
         )
 
     # Snake food
