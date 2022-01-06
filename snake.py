@@ -4,11 +4,9 @@ import random
 import numpy as np
 from collections import defaultdict
 import time
-from operator import itemgetter
 import pickle
-from pprint import pprint
-
-BRICK = 20  # size of unit snake element
+import itertools
+import argparse
 
 
 class Color:
@@ -28,53 +26,54 @@ class Snake:
 
     def l1(self, food_pos):
         "Return L1 distance to a food point"
-        dist = abs(self.head[0] - food_pos[0]) + abs(
-            self.head[1] - food_pos[1]
-        )
-        return int(dist / BRICK)
+        dx = abs(self.head[0] - food_pos[0])
+        dy = abs(self.head[1] - food_pos[1])
+        return dx + dy
 
     def move(self, key, env):
         if sorted((key, self.direction)) in (
             [pygame.K_RIGHT, pygame.K_LEFT],
             [pygame.K_DOWN, pygame.K_UP],
         ):
-            return
+            return  # can't move in opposite direction
 
         self.direction = key
         if key == pygame.K_UP:
-            self.head[1] -= BRICK
+            self.head[1] -= 1
         elif key == pygame.K_LEFT:
-            self.head[0] -= BRICK
+            self.head[0] -= 1
         elif key == pygame.K_DOWN:
-            self.head[1] += BRICK
+            self.head[1] += 1
         elif key == pygame.K_RIGHT:
-            self.head[0] += BRICK
+            self.head[0] += 1
 
         # Snake body growing mechanism
-        self.body.insert(0, list(self.head))
+        # self.body.insert(0, list(self.head))
         if self.head == env.food_pos:
             env.score += 1
             env.food_pos = env.gen_point()
             while env.food_pos in self.body:
                 env.food_pos = env.gen_point()
-        else:
-            self.body.pop()
-
-
-def isKthBitSet(n, k) -> bool:
-    return n & (1 << (k - 1)) != 0
+        # else:
+        #     self.body.pop()
 
 
 class Environment:
-    def __init__(self, frame_size_x=10 * BRICK, frame_size_y=10 * BRICK):
+    def __init__(self, x=10, y=10, brick=20):
         # Window size
-        self.frame_size_x = frame_size_x
-        self.frame_size_y = frame_size_y
+        self.x, self.y, self.brick = x, y, brick
 
         self.food_pos = self.gen_point()  # food position
         self.score = 0
 
         self.state_size = 12
+
+        self._direction_map = {
+            0b1000: pygame.K_LEFT,
+            0b10000: pygame.K_RIGHT,
+            0b100000: pygame.K_UP,
+            0b1000000: pygame.K_DOWN,
+        }
 
         # Checks for errors encountered
         check_errors = pygame.init()
@@ -84,12 +83,10 @@ class Environment:
                 f"[!] Had {check_errors[1]} errors when initialising game, exiting..."
             )
             sys.exit(-1)
-        else:
-            print("[+] Game successfully initialised")
 
     def state(self, snake: Snake):
         """
-        The state is a set of (12) bits, representing:
+        The state is a set of (12) bits as an integer number, representing:
             - Danger one step ahead
             - Danger on the left
             - Danger on the right
@@ -103,38 +100,27 @@ class Environment:
             - The food is on the lower side
             - The food is in one step distance
         """
-
-        state = np.zeros(self.state_size, dtype="I")
+        state = [0] * self.state_size
         x, y = snake.head
 
         if snake.direction == pygame.K_LEFT:
-            if x < BRICK:
-                state[0] = 1
-            if y > self.frame_size_y - 2 * BRICK:
-                state[1] = 1
-            if y < BRICK:
-                state[2] = 1
+            state[0] = x < 1
+            state[1] = y > self.y - 2
+            state[2] = y < 1
         elif snake.direction == pygame.K_RIGHT:
-            if x > self.frame_size_x - 2 * BRICK:
-                state[0] = 1
-            if y < BRICK:
-                state[1] = 1
-            if y > self.frame_size_y - 2 * BRICK:
-                state[2] = 1
+            state[0] = x > self.x - 2
+            state[1] = y < 1
+            state[2] = y > self.y - 2
         elif snake.direction == pygame.K_UP:
-            if y < BRICK:
-                state[0] = 1
-            if x < BRICK:
-                state[1] = 1
-            if x > self.frame_size_x - 2 * BRICK:
-                state[2] = 1
+            state[0] = y < 1
+            state[1] = x < 1
+            state[2] = x > self.x - 2
         elif snake.direction == pygame.K_DOWN:
-            if y > self.frame_size_y - 2 * BRICK:
-                state[0] = 1
-            if x > self.frame_size_x - 2 * BRICK:
-                state[1] = 1
-            if x < BRICK:
-                state[2] = 1
+            state[0] = y > self.y - 2
+            state[1] = x > self.x - 2
+            state[2] = x < 1
+        else:
+            raise NotImplementedError(snake.direction)
 
         state[3] = snake.direction == pygame.K_LEFT
         state[4] = snake.direction == pygame.K_RIGHT
@@ -152,38 +138,21 @@ class Environment:
                 shash |= 1 << i  # set i-th bit
 
         # print("{0:b}".format(shash)[::-1], state, snake.direction)
-
-        return shash
+        return state, shash
 
     def gen_point(self):
         "Generate random point"
-        return [
-            random.randrange(1, (self.frame_size_x // BRICK)) * BRICK,
-            random.randrange(1, (self.frame_size_y // BRICK)) * BRICK,
-        ]
+        return [random.randrange(0, self.x), random.randrange(0, self.y)]
 
     def check_borders(self, snake: Snake):
-        if (
-            snake.head[0] < 0
-            or snake.head[0] > self.frame_size_x - BRICK
-            or snake.head[1] < 0
-            or snake.head[1] > self.frame_size_y - BRICK
-            or snake.head in snake.body[1:]  # Snake self intersection
-        ):
-            return False
-        return True
+        return (
+            (0 <= snake.head[0] < self.x)
+            and (0 <= snake.head[1] < self.y)
+            and snake.head not in snake.body[1:]  # Snake self intersection
+        )
 
     def direction(self, state):
-        if isKthBitSet(state, 4):
-            return pygame.K_LEFT
-        elif isKthBitSet(state, 5):
-            return pygame.K_RIGHT
-        elif isKthBitSet(state, 6):
-            return pygame.K_UP
-        elif isKthBitSet(state, 7):
-            return pygame.K_DOWN
-        else:
-            raise NotImplemented
+        return self._direction_map[state & 0b1111000]
 
     def direction_neigbs(direction):
         if direction == pygame.K_UP:
@@ -195,42 +164,41 @@ class Environment:
         elif direction == pygame.K_LEFT:
             return pygame.K_DOWN, pygame.K_UP
         else:
-            raise NotImplemented
+            raise NotImplementedError(direction)
 
-    def reward(self, state, action):
+    def reward(self, state, state_vec, action):
         direction = self.direction(state)
-        dneigbs = Environment.direction_neigbs(direction)
+        l, r = Environment.direction_neigbs(direction)
 
-        if isKthBitSet(state, 1) and action == direction:  # danger ahead
+        if state_vec[0] and action == direction:  # danger ahead
             return -1
-        elif isKthBitSet(state, 2) and action == dneigbs[0]:  # danger left
+        elif state_vec[1] and action == l:  # danger left
             return -1
-        elif isKthBitSet(state, 3) and action == dneigbs[1]:  # danger right
+        elif state_vec[2] and action == r:  # danger right
             return -1
-        elif isKthBitSet(state, 12):  # one step to a food
-            if isKthBitSet(state, 11) and action == pygame.K_DOWN:
+        elif state_vec[11]:  # one step to a food
+            if state_vec[10] and action == pygame.K_DOWN:
                 return 1  # food down
-            elif isKthBitSet(state, 10) and action == pygame.K_UP:
+            elif state_vec[9] and action == pygame.K_UP:
                 return 1  # food up
-            elif isKthBitSet(state, 8) and action == pygame.K_LEFT:
+            elif state_vec[7] and action == pygame.K_LEFT:
                 return 1  # food left
-            elif isKthBitSet(state, 9) and action == pygame.K_RIGHT:
+            elif state_vec[8] and action == pygame.K_RIGHT:
                 return 1  # food right
 
         return 0
 
-
-def game_over():
-    "Game Over"
-    pygame.quit()
-    sys.exit()
+    def available_actions(direction, shuffle=False):
+        l, r = Environment.direction_neigbs(direction)
+        actions = [direction, l, r]
+        if shuffle:
+            np.random.shuffle(actions)
+        return actions
 
 
 def show_score(game, score):
     score_font = pygame.font.SysFont("consolas", 20)
-    score_surface = score_font.render(
-        "Score : " + str(score), True, Color.WHITE
-    )
+    score_surface = score_font.render("Score : %d" % score, True, Color.WHITE)
     score_rect = score_surface.get_rect()
     frame_size_x, frame_size_y = game.get_size()
     score_rect.midtop = (frame_size_x / 2, frame_size_y / 1.2)
@@ -238,121 +206,158 @@ def show_score(game, score):
 
 
 def plot_game(game, env, snake):
-    # GFX
-    game.fill(Color.BLACK)
+    game.fill(Color.BLACK)  # GFX
 
-    pygame.draw.rect(
-        game,
-        Color.WHITE,
-        pygame.Rect(snake.head[0], snake.head[1], BRICK, BRICK),
-    )
+    def my_rect(xy):
+        return pygame.Rect(xy[0] * brick, xy[1] * brick, brick, brick)
+
+    brick = env.brick
+    pygame.draw.rect(game, Color.WHITE, my_rect(snake.head))
     for pos in snake.body[1:]:
-        pygame.draw.rect(
-            game, Color.GREEN, pygame.Rect(pos[0], pos[1], BRICK, BRICK)
-        )
+        pygame.draw.rect(game, Color.GREEN, my_rect(pos))
 
     # Snake food
-    pygame.draw.rect(
-        game,
-        Color.RED,
-        pygame.Rect(env.food_pos[0], env.food_pos[1], BRICK, BRICK),
-    )
+    pygame.draw.rect(game, Color.RED, my_rect(env.food_pos))
 
     show_score(game, env.score)
-    # Refresh game screen
-    pygame.display.update()
+    pygame.display.update()  # Refresh game screen
 
 
-def rand_action(direction):
-    while True:
-        action = random.randrange(pygame.K_RIGHT, pygame.K_UP + 1)
-        if direction == pygame.K_DOWN and action != pygame.K_UP:
-            return action
-        elif direction == pygame.K_UP and action != pygame.K_DOWN:
-            return action
-        elif direction == pygame.K_RIGHT and action != pygame.K_LEFT:
-            return action
-        elif direction == pygame.K_LEFT and action != pygame.K_RIGHT:
-            return action
+def epsilon_soft_distribution(n, eps):
+    p = np.full(n, eps / n)
+    p[0] = 1 - eps + eps / n
+    return p
 
 
-def load_Q():
-    with open("Q.pkl", "rb") as f:
-        Q = pickle.load(f)
-        print("size:", len(Q))
-        pprint(Q)
+class MonteCarloEpsilonGreedy:
+    def __init__(self, game, env, eps=0.1):
+        self.game = game
+        self.env = env
+        self.eps = eps
+        self.pi, self.Q = {}, {}
+        self.Returns = defaultdict(lambda: [0, 0])
+        self.p_soft = epsilon_soft_distribution(3, eps)
+        # prechoose big number of random numbers 0<=x<3 (optimization)
+        self.choices = np.random.choice(
+            self.p_soft.size,
+            size=1000 * (env.x + env.y),
+            p=self.p_soft,
+        )
 
-
-def MonteCarloES(game, env, visual=True, delay=1):
-    pi = {}
-    Q = {}
-    Returns = defaultdict(lambda: [0, 0])
-
-    def learning_loop():
-        snake = Snake(env.gen_point())
+    def run_episode(self, train=True, visual=True, delay=1):
+        snake = Snake(self.env.gen_point())
         if visual:
-            plot_game(game, env, snake)
+            plot_game(self.game, self.env, snake)
 
         episode = []
-        step_i = 0
-        while True:
-            state = env.state(snake)
-            if step_i == 0:
-                action = rand_action(snake.direction)
+        for epi in itertools.count():  # while True
+            state_vec, state = self.env.state(snake)
+            direction = env.direction(state)
+
+            if epi == 0 and train:  # exploring start
+                actions = Environment.available_actions(direction, True)
             else:
-                action = pi.get(state, rand_action(snake.direction))
+                actions = self.pi.get(
+                    state, Environment.available_actions(direction, True)
+                )
 
-            step_i += 1
-            snake.move(action, env)
+            if train:
+                if epi > self.choices.size - 1:
+                    raise RuntimeError(
+                        "too many random walk steps: ", self.choices.size
+                    )
+                ix = self.choices[epi]  # explore in train mode
+            else:
+                ix = 0  # always select the best action in test mode
+            action = actions[ix]
 
-            episode.append((state, action, env.reward(state, action)))
+            snake.move(action, self.env)
+
+            if train:
+                reward = self.env.reward(state, state_vec, action)
+                episode.append((state, action, reward))
 
             # Episode Over conditions
-            if not env.check_borders(snake):
-                env.score = 0
+            if not self.env.check_borders(snake):
+                self.env.score = 0
                 break
 
             if visual:
-                plot_game(game, env, snake)
+                plot_game(self.game, self.env, snake)
                 time.sleep(delay)
 
-        # print(Q)
+        if train:
+            self.backtrace(episode)
 
+    def greedy_pi(self, q, state):
+        a_star = max(q, key=q.get)
+        actions = Environment.available_actions(env.direction(state))
+        res = [a_star]
+        res.extend(a for a in actions if a != a_star)
+        self.pi[state] = res
+
+    def backtrace(self, episode):
         G = 0
         for i, (state, action, reward) in enumerate(episode[::-1]):
             G = G + reward
-            found = filter(
-                lambda sa: state == sa[0] and action == sa[1],
-                episode[: -i - 1],
+            found = (
+                1
+                for s, a, _ in episode[: -i - 1]
+                if state == s and action == a
             )
-            if not list(found):
-                ret = Returns[(state, action)]
+            if next(found, None) is None:
+                ret = self.Returns[(state, action)]
                 ret[0] += G
                 ret[1] += 1
-                Q[(state, action)] = ret[0] / ret[1]
-                pi[state] = max(
-                    [(a, q) for (s, a), q in Q.items() if s == state],
-                    key=itemgetter(1),
-                )[0]
+                q = self.Q.setdefault(state, {})
+                q[action] = ret[0] / ret[1]
+                self.greedy_pi(q, state)
 
-        # print(G)
+    def run(self, train=True, visual=True, delay=1):
+        if not train:
+            with open("Q.pkl", "rb") as f:
+                self.Q = pickle.load(f)
+                for state, q in self.Q.items():
+                    self.greedy_pi(q, state)
+                self.print_stat(0)
 
-    try:
-        while True:
-            learning_loop()
-    except:
-        with open("Q.pkl", "wb") as f:
-            pickle.dump(Q, f)
+        try:
+            for epi in itertools.count():  # while True
+                self.run_episode(train, visual, delay)
+                if train and epi % 1000 == 0:
+                    self.print_stat(epi)
+
+        except KeyboardInterrupt:
+            print("\r")
+            if train:
+                with open("Q.pkl", "wb") as f:
+                    pickle.dump(self.Q, f)
+
+    def print_stat(self, epi):
+        print(
+            "Episode %i, # of states %i, # of state-value pairs: %i\r"
+            % (
+                epi,
+                len(self.Q),
+                sum((len(v) for k, v in self.Q.items())),
+            ),
+            end="",
+        )
 
 
-def by_hand(game, env):
+def debug(game, env):
     key = None
     snake = Snake(env.gen_point())
 
     print("INIT")
-    print("{0:b}".format(env.state(snake))[::-1])
+    _, state = env.state(snake)
+    print("{0:b}".format(state)[::-1])
 
     plot_game(game, env, snake)
+
+    def game_over():
+        pygame.quit()
+        sys.exit()
 
     # Main logic
     while True:
@@ -378,22 +383,59 @@ def by_hand(game, env):
 
         plot_game(game, env, snake)
 
-        state = env.state(snake)
+        state_vec, state = env.state(snake)
         print(
-            env.reward(state, pygame.K_LEFT),
-            env.reward(state, pygame.K_RIGHT),
-            env.reward(state, pygame.K_UP),
-            env.reward(state, pygame.K_DOWN),
+            env.reward(state, state_vec, pygame.K_LEFT),
+            env.reward(state, state_vec, pygame.K_RIGHT),
+            env.reward(state, state_vec, pygame.K_UP),
+            env.reward(state, state_vec, pygame.K_DOWN),
         )
 
 
 if __name__ == "__main__":
-    env = Environment(10 * BRICK, 10 * BRICK)
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--train",
+        dest="train",
+        default=False,
+        action=argparse.BooleanOptionalAction,
+        help="train and save Q.pkl in current directory, load it when not `train`",
+    )
+    parser.add_argument(
+        "--visual",
+        dest="visual",
+        default=False,
+        action=argparse.BooleanOptionalAction,
+    )
+    parser.add_argument(
+        "--delay",
+        dest="delay",
+        default=0.1,
+        type=float,
+        help="speed of snake moves in visual mode",
+    )
+    parser.add_argument(
+        "--brick",
+        dest="brick",
+        default=20,
+        type=int,
+        help="size of a grid cell in pixels",
+    )
+    parser.add_argument(
+        "--x", dest="x", default=10, type=int, help="frame `x` size in bricks"
+    )
+    parser.add_argument(
+        "--y", dest="y", default=10, type=int, help="frame `y` size in bricks"
+    )
+
+    args = parser.parse_args()
+
+    env = Environment(args.x, args.y, args.brick)
 
     # Initialize game window
     pygame.display.set_caption("Snake")
-    game = pygame.display.set_mode((env.frame_size_x, env.frame_size_y))
+    game = pygame.display.set_mode((args.x * args.brick, args.y * args.brick))
 
-    # MonteCarloES(game, env, 0, 1)
-    # by_hand(game, env)
-    load_Q()
+    alg = MonteCarloEpsilonGreedy(game, env, eps=0.1)
+    alg.run(train=args.train, visual=args.visual, delay=args.delay)
+    # debug(game, env)
