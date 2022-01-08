@@ -18,9 +18,8 @@ class Color:
 
 
 class Snake:
-    def __init__(self, head):
-        self.head = head
-        self.body = [head]
+    def __init__(self, head, grow=False):
+        self.head, self.body, self.grow = head, [head], grow
         # get random direction: LEFT, RIGHT, UP, DOWN
         self.direction = random.randrange(pygame.K_RIGHT, pygame.K_UP + 1)
 
@@ -30,43 +29,53 @@ class Snake:
         dy = abs(self.head[1] - food_pos[1])
         return dx + dy
 
-    def move(self, key, env):
+    def move_pos(self, pos, key):
         if sorted((key, self.direction)) in (
             [pygame.K_RIGHT, pygame.K_LEFT],
             [pygame.K_DOWN, pygame.K_UP],
         ):
-            return  # can't move in opposite direction
+            return False  # can't move in opposite direction
+
+        if key == pygame.K_UP:
+            pos[1] -= 1
+        elif key == pygame.K_LEFT:
+            pos[0] -= 1
+        elif key == pygame.K_DOWN:
+            pos[1] += 1
+        elif key == pygame.K_RIGHT:
+            pos[0] += 1
+        else:
+            raise NotImplementedError(key)
+
+        return True
+
+    def move(self, key, env):
+        if not self.move_pos(self.head, key):
+            return
 
         self.direction = key
-        if key == pygame.K_UP:
-            self.head[1] -= 1
-        elif key == pygame.K_LEFT:
-            self.head[0] -= 1
-        elif key == pygame.K_DOWN:
-            self.head[1] += 1
-        elif key == pygame.K_RIGHT:
-            self.head[0] += 1
 
         # Snake body growing mechanism
-        # self.body.insert(0, list(self.head))
+        if self.grow:
+            self.body.insert(0, list(self.head))
         if self.head == env.food_pos:
             env.score += 1
             env.food_pos = env.gen_point()
             while env.food_pos in self.body:
                 env.food_pos = env.gen_point()
-        # else:
-        #     self.body.pop()
+        elif self.grow:
+            self.body.pop()
 
 
 class Environment:
-    def __init__(self, x=10, y=10, brick=20):
+    def __init__(self, x=10, y=10, brick=20, grow=False):
         # Window size
-        self.x, self.y, self.brick = x, y, brick
+        self.x, self.y, self.brick, self.grow = x, y, brick, grow
 
         self.food_pos = self.gen_point()  # food position
         self.score = 0
 
-        self.state_size = 12
+        self.state_size = 12 + grow * (self.x * self.y)
 
         self._direction_map = {
             0b1000: pygame.K_LEFT,
@@ -86,7 +95,8 @@ class Environment:
 
     def state(self, snake: Snake):
         """
-        The state is a set of (12) bits as an integer number, representing:
+        The state is a set of (12 + number of cells) bits as an integer number,
+        representing:
             - Danger one step ahead
             - Danger on the left
             - Danger on the right
@@ -99,6 +109,7 @@ class Environment:
             - The food is on the upper side
             - The food is on the lower side
             - The food is in one step distance
+            - Boolean indicator if cell is empty for each cell
         """
         state = [0] * self.state_size
         x, y = snake.head
@@ -131,6 +142,11 @@ class Environment:
         state[9] = self.food_pos[1] < y
         state[10] = self.food_pos[1] > y
         state[11] = snake.l1(self.food_pos) == 1
+
+        if self.grow:
+            # encode every grid cell state
+            for i, pos in enumerate(snake.body):
+                state[12 + pos[0] + pos[1] * self.x] = True
 
         shash = 0
         for i, b in enumerate(state):
@@ -166,7 +182,11 @@ class Environment:
         else:
             raise NotImplementedError(direction)
 
-    def reward(self, state, state_vec, action):
+    def reward(self, snake, state, state_vec, action):
+        next_pos = [snake.head[0], snake.head[1]]  # copy head
+        if not snake.move_pos(next_pos, action):  # move copied head
+            return 0
+
         direction = self.direction(state)
         l, r = Environment.direction_neigbs(direction)
 
@@ -175,6 +195,8 @@ class Environment:
         elif state_vec[1] and action == l:  # danger left
             return -1
         elif state_vec[2] and action == r:  # danger right
+            return -1
+        elif next_pos in snake.body[1:-1]:  # self intersection
             return -1
         elif state_vec[11]:  # one step to a food
             if state_vec[10] and action == pygame.K_DOWN:
@@ -197,7 +219,7 @@ class Environment:
 
 
 def show_score(game, score):
-    score_font = pygame.font.SysFont("consolas", 20)
+    score_font = pygame.font.SysFont("consolas", 17)
     score_surface = score_font.render("Score : %d" % score, True, Color.WHITE)
     score_rect = score_surface.get_rect()
     frame_size_x, frame_size_y = game.get_size()
@@ -245,16 +267,16 @@ class MonteCarloEpsilonGreedy:
         )
 
     def run_episode(self, train=True, visual=True, delay=1):
-        snake = Snake(self.env.gen_point())
+        snake = Snake(self.env.gen_point(), self.env.grow)
         if visual:
             plot_game(self.game, self.env, snake)
 
         episode = []
-        for epi in itertools.count():  # while True
+        for step in itertools.count():  # while True
             state_vec, state = self.env.state(snake)
             direction = env.direction(state)
 
-            if epi == 0 and train:  # exploring start
+            if step == 0 and train:  # exploring start
                 actions = Environment.available_actions(direction, True)
             else:
                 actions = self.pi.get(
@@ -262,11 +284,11 @@ class MonteCarloEpsilonGreedy:
                 )
 
             if train:
-                if epi > self.choices.size - 1:
+                if step > self.choices.size - 1:
                     raise RuntimeError(
                         "too many random walk steps: ", self.choices.size
                     )
-                ix = self.choices[epi]  # explore in train mode
+                ix = self.choices[step]  # explore in train mode
             else:
                 ix = 0  # always select the best action in test mode
             action = actions[ix]
@@ -274,7 +296,7 @@ class MonteCarloEpsilonGreedy:
             snake.move(action, self.env)
 
             if train:
-                reward = self.env.reward(state, state_vec, action)
+                reward = self.env.reward(snake, state, state_vec, action)
                 episode.append((state, action, reward))
 
             # Episode Over conditions
@@ -347,7 +369,7 @@ class MonteCarloEpsilonGreedy:
 
 def debug(game, env):
     key = None
-    snake = Snake(env.gen_point())
+    snake = Snake(env.gen_point(), env.grow)
 
     print("INIT")
     _, state = env.state(snake)
@@ -385,10 +407,14 @@ def debug(game, env):
 
         state_vec, state = env.state(snake)
         print(
-            env.reward(state, state_vec, pygame.K_LEFT),
-            env.reward(state, state_vec, pygame.K_RIGHT),
-            env.reward(state, state_vec, pygame.K_UP),
-            env.reward(state, state_vec, pygame.K_DOWN),
+            "state %s, Reward if moving (LEFT, RIGHT, UP, DOWN): (%i, %i, %i, %i)"
+            % (
+                "{0:b}".format(state)[::-1],
+                env.reward(snake, state, state_vec, pygame.K_LEFT),
+                env.reward(snake, state, state_vec, pygame.K_RIGHT),
+                env.reward(snake, state, state_vec, pygame.K_UP),
+                env.reward(snake, state, state_vec, pygame.K_DOWN),
+            ),
         )
 
 
@@ -412,30 +438,46 @@ if __name__ == "__main__":
         dest="delay",
         default=0.1,
         type=float,
-        help="speed of snake moves in visual mode",
+        help="controls snake speed in visual mode",
     )
     parser.add_argument(
         "--brick",
         dest="brick",
-        default=20,
+        default=30,
         type=int,
         help="size of a grid cell in pixels",
     )
     parser.add_argument(
-        "--x", dest="x", default=10, type=int, help="frame `x` size in bricks"
+        "--x", dest="x", default=4, type=int, help="frame `x` size in bricks"
     )
     parser.add_argument(
-        "--y", dest="y", default=10, type=int, help="frame `y` size in bricks"
+        "--y", dest="y", default=4, type=int, help="frame `y` size in bricks"
+    )
+    parser.add_argument(
+        "--grow",
+        dest="grow",
+        default=False,
+        action=argparse.BooleanOptionalAction,
+        help="whether to grow snake on eating a target",
+    )
+    parser.add_argument(
+        "--debug",
+        dest="debug",
+        default=False,
+        action=argparse.BooleanOptionalAction,
+        help="move snake by7 hand and see it's state",
     )
 
     args = parser.parse_args()
 
-    env = Environment(args.x, args.y, args.brick)
+    env = Environment(args.x, args.y, args.brick, args.grow)
 
     # Initialize game window
     pygame.display.set_caption("Snake")
     game = pygame.display.set_mode((args.x * args.brick, args.y * args.brick))
 
-    alg = MonteCarloEpsilonGreedy(game, env, eps=0.1)
-    alg.run(train=args.train, visual=args.visual, delay=args.delay)
-    # debug(game, env)
+    if args.debug:
+        debug(game, env)
+    else:
+        alg = MonteCarloEpsilonGreedy(game, env, eps=0.1)
+        alg.run(train=args.train, visual=args.visual, delay=args.delay)
