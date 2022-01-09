@@ -7,6 +7,7 @@ import time
 import pickle
 import itertools
 import argparse
+from argparse import RawTextHelpFormatter
 
 
 class Color:
@@ -19,7 +20,7 @@ class Color:
 
 class Snake:
     def __init__(self, head, grow=False):
-        self.head, self.body, self.grow = head, [head], grow
+        self.head, self.body, self.grow = list(head), [list(head)], grow
         # get random direction: LEFT, RIGHT, UP, DOWN
         self.direction = random.randrange(pygame.K_RIGHT, pygame.K_UP + 1)
 
@@ -28,6 +29,12 @@ class Snake:
         dx = abs(self.head[0] - food_pos[0])
         dy = abs(self.head[1] - food_pos[1])
         return dx + dy
+
+    def gen_head(env):
+        head = env.gen_point()
+        while head == env.food_pos:
+            head = env.gen_point()
+        return head
 
     def move_pos(self, pos, key):
         if sorted((key, self.direction)) in (
@@ -61,7 +68,7 @@ class Snake:
         if self.head == env.food_pos:
             env.score += 1
             env.food_pos = env.gen_point()
-            while env.food_pos in self.body:
+            while env.food_pos in self.body and env.score != env.x * env.y - 1:
                 env.food_pos = env.gen_point()
         elif self.grow:
             self.body.pop()
@@ -267,7 +274,7 @@ class MonteCarloEpsilonGreedy:
         )
 
     def run_episode(self, train=True, visual=True, delay=1):
-        snake = Snake(self.env.gen_point(), self.env.grow)
+        snake = Snake(Snake.gen_head(self.env), self.env.grow)
         if visual:
             plot_game(self.game, self.env, snake)
 
@@ -300,7 +307,7 @@ class MonteCarloEpsilonGreedy:
                 episode.append((state, action, reward))
 
             # Episode Over conditions
-            if not self.env.check_borders(snake):
+            if not env.check_borders(snake) or env.score == env.x * env.y - 1:
                 self.env.score = 0
                 break
 
@@ -369,7 +376,7 @@ class MonteCarloEpsilonGreedy:
 
 def debug(game, env):
     key = None
-    snake = Snake(env.gen_point(), env.grow)
+    snake = Snake(Snake.gen_head(env), env.grow)
 
     print("INIT")
     _, state = env.state(snake)
@@ -400,7 +407,7 @@ def debug(game, env):
         snake.move(key, env)
 
         # Game Over conditions
-        if not env.check_borders(snake):
+        if not env.check_borders(snake) or env.score == env.x * env.y - 1:
             game_over()
 
         plot_game(game, env, snake)
@@ -419,13 +426,13 @@ def debug(game, env):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(formatter_class=RawTextHelpFormatter)
     parser.add_argument(
         "--train",
         dest="train",
         default=False,
         action=argparse.BooleanOptionalAction,
-        help="train and save Q.pkl in current directory, load it when not `train`",
+        help="Train and save Q.pkl in current directory, load it when not `train`. \nTo stop training press `Ctrl-C`.",
     )
     parser.add_argument(
         "--visual",
@@ -438,34 +445,34 @@ if __name__ == "__main__":
         dest="delay",
         default=0.1,
         type=float,
-        help="controls snake speed in visual mode",
+        help="Controls snake speed in visual mode",
     )
     parser.add_argument(
         "--brick",
         dest="brick",
         default=30,
         type=int,
-        help="size of a grid cell in pixels",
+        help="Size of a grid cell in pixels",
     )
     parser.add_argument(
-        "--x", dest="x", default=4, type=int, help="frame `x` size in bricks"
+        "--x", dest="x", default=4, type=int, help="Frame `x` size in bricks"
     )
     parser.add_argument(
-        "--y", dest="y", default=4, type=int, help="frame `y` size in bricks"
+        "--y", dest="y", default=4, type=int, help="Frame `y` size in bricks"
     )
     parser.add_argument(
         "--grow",
         dest="grow",
         default=False,
         action=argparse.BooleanOptionalAction,
-        help="whether to grow snake on eating a target",
+        help="Whether to grow snake on eating a target",
     )
     parser.add_argument(
         "--debug",
         dest="debug",
         default=False,
         action=argparse.BooleanOptionalAction,
-        help="move snake by7 hand and see it's state",
+        help="Move snake by7 hand and see it's state",
     )
 
     args = parser.parse_args()
