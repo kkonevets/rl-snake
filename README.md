@@ -32,17 +32,19 @@ The more you train the better it becomes. Test it:
 python snake.py --visual --x=10 --y=10
 ```
 
-![](mc-es-nogrow.gif)
+![](etc/mc-es-nogrow.gif)
 
 ### Growing snake
 ```python
-python snake.py --train --x=4 --y=4 --grow
+python snake.py --train --x=5 --y=5 --grow
 ```
 
-If snake's shape is accounted then number of states increases fast, so only small grids are computable, though not perfectly. Test it:
+Additional 9 boolean indicators are added to a snake's state for each cell around a head, indicating if cell belongs to a snake. So snake is myopic in terms of what it can see. Adding all grid cells is not tractable due to enourmouse ammount of possible states.
+
+![](etc/head-state.png)
 
 ```python
-python snake.py --visual --x=4 --y=4 --grow --delay=0.5
+python snake.py --visual --x=5 --y=5 --grow --delay=0.3
 ```
 
-![](mc-wes-grow.gif)
+![](etc/mc-wes-grow.gif)

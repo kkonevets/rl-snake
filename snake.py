@@ -8,6 +8,7 @@ import pickle
 import itertools
 import argparse
 from argparse import RawTextHelpFormatter
+import os
 
 
 class Color:
@@ -19,22 +20,23 @@ class Color:
 
 
 class Snake:
-    def __init__(self, head, grow=False):
-        self.head, self.body, self.grow = list(head), [list(head)], grow
+    def __init__(self, env):
+        self.env = env
+
+        # head should differ from food
+        self.head = env.gen_point()
+        while self.head == env.food_pos:
+            self.head = env.gen_point()
+
+        self.body = [list(self.head)]
         # get random direction: LEFT, RIGHT, UP, DOWN
         self.direction = random.randrange(pygame.K_RIGHT, pygame.K_UP + 1)
 
-    def l1(self, food_pos):
+    def food_dist(self):
         "Return L1 distance to a food point"
-        dx = abs(self.head[0] - food_pos[0])
-        dy = abs(self.head[1] - food_pos[1])
+        dx = abs(self.head[0] - env.food_pos[0])
+        dy = abs(self.head[1] - env.food_pos[1])
         return dx + dy
-
-    def gen_head(env):
-        head = env.gen_point()
-        while head == env.food_pos:
-            head = env.gen_point()
-        return head
 
     def move_pos(self, pos, key):
         if sorted((key, self.direction)) in (
@@ -56,22 +58,26 @@ class Snake:
 
         return True
 
-    def move(self, key, env):
+    def move(self, key):
         if not self.move_pos(self.head, key):
             return
 
         self.direction = key
 
+        env = self.env
         # Snake body growing mechanism
-        if self.grow:
-            self.body.insert(0, list(self.head))
+        self.body.insert(0, list(self.head))
+
+        if not env.grow or self.head != env.food_pos:
+            self.body.pop()
+
         if self.head == env.food_pos:
             env.score += 1
             env.food_pos = env.gen_point()
-            while env.food_pos in self.body and env.score != env.x * env.y - 1:
+            while (
+                env.food_pos in self.body and len(self.body) != env.x * env.y
+            ):
                 env.food_pos = env.gen_point()
-        elif self.grow:
-            self.body.pop()
 
 
 class Environment:
@@ -82,7 +88,7 @@ class Environment:
         self.food_pos = self.gen_point()  # food position
         self.score = 0
 
-        self.state_size = 12 + grow * (self.x * self.y)
+        self.state_size = 12 + grow * 9
 
         self._direction_map = {
             0b1000: pygame.K_LEFT,
@@ -96,14 +102,15 @@ class Environment:
         # second number in tuple gives number of errors
         if check_errors[1] > 0:
             print(
-                f"[!] Had {check_errors[1]} errors when initialising game, exiting..."
+                f"[!] Had {check_errors[1]} errors\
+                when initialising game, exiting..."
             )
             sys.exit(-1)
 
     def state(self, snake: Snake):
         """
-        The state is a set of (12 + number of cells) bits as an integer number,
-        representing:
+        The state is a set of (12 + 9 cells around a head) bits
+        as an integer number, representing:
             - Danger one step ahead
             - Danger on the left
             - Danger on the right
@@ -116,7 +123,7 @@ class Environment:
             - The food is on the upper side
             - The food is on the lower side
             - The food is in one step distance
-            - Boolean indicator if cell is empty for each cell
+            - Boolean indicator if cell is empty for each cell around a head
         """
         state = [0] * self.state_size
         x, y = snake.head
@@ -148,12 +155,16 @@ class Environment:
         state[8] = self.food_pos[0] > x
         state[9] = self.food_pos[1] < y
         state[10] = self.food_pos[1] > y
-        state[11] = snake.l1(self.food_pos) == 1
+        state[11] = snake.food_dist() == 1
 
         if self.grow:
-            # encode every grid cell state
-            for i, pos in enumerate(snake.body):
-                state[12 + pos[0] + pos[1] * self.x] = True
+            # encode every grid cell state aroud a head
+            ix = 12
+            for i in (x - 1, x, x + 1):
+                for j in (y - 1, y, y + 1):
+                    if (0 <= i < self.x) and (0 <= j < self.y):
+                        state[ix] = [i, j] in snake.body
+                    ix += 1
 
         shash = 0
         for i, b in enumerate(state):
@@ -252,43 +263,45 @@ def plot_game(game, env, snake):
     pygame.display.update()  # Refresh game screen
 
 
-def epsilon_soft_distribution(n, eps):
-    p = np.full(n, eps / n)
-    p[0] = 1 - eps + eps / n
-    return p
+def epsilon_soft_choices(n, m, eps):
+    """choose n random integers 0<=x<m from epsilon-soft distribution,
+    first element has the biggest probability"""
+    p_soft = np.full(m, eps / m)
+    p_soft[0] = 1 - eps + eps / m
+    return np.random.choice(m, size=n, p=p_soft)
+
+
+def swap_positions(lst: list, pos1, pos2):
+    """swap list elements"""
+    lst[pos1], lst[pos2] = lst[pos2], lst[pos1]
+    return lst
 
 
 class MonteCarloEpsilonGreedy:
     def __init__(self, game, env, eps=0.1):
-        self.game = game
-        self.env = env
-        self.eps = eps
+        self.game, self.env, self.eps = game, env, eps
         self.pi, self.Q = {}, {}
         self.Returns = defaultdict(lambda: [0, 0])
-        self.p_soft = epsilon_soft_distribution(3, eps)
         # prechoose big number of random numbers 0<=x<3 (optimization)
-        self.choices = np.random.choice(
-            self.p_soft.size,
-            size=1000 * (env.x + env.y),
-            p=self.p_soft,
-        )
+        # 3 available actions: [forward, left, right]
+        self.choices = epsilon_soft_choices(1000 * (env.x + env.y), 3, eps)
 
-    def run_episode(self, train=True, visual=True, delay=1):
-        snake = Snake(Snake.gen_head(self.env), self.env.grow)
-        if visual:
+    def run_episode(self, train=True, delay=1):
+        snake = Snake(self.env)
+        if self.game:
             plot_game(self.game, self.env, snake)
 
         episode = []
         for step in itertools.count():  # while True
             state_vec, state = self.env.state(snake)
-            direction = env.direction(state)
+            direction = self.env.direction(state)
 
             if step == 0 and train:  # exploring start
                 actions = Environment.available_actions(direction, True)
             else:
-                actions = self.pi.get(
-                    state, Environment.available_actions(direction, True)
-                )
+                actions = self.pi.get(state)
+                if actions is None:
+                    actions = Environment.available_actions(direction, True)
 
             if train:
                 if step > self.choices.size - 1:
@@ -300,30 +313,31 @@ class MonteCarloEpsilonGreedy:
                 ix = 0  # always select the best action in test mode
             action = actions[ix]
 
-            snake.move(action, self.env)
+            snake.move(action)
 
             if train:
                 reward = self.env.reward(snake, state, state_vec, action)
                 episode.append((state, action, reward))
 
             # Episode Over conditions
-            if not env.check_borders(snake) or env.score == env.x * env.y - 1:
+            if (
+                not self.env.check_borders(snake)
+                or len(snake.body) == self.env.x * self.env.y
+            ):
                 self.env.score = 0
                 break
 
-            if visual:
+            if self.game:
                 plot_game(self.game, self.env, snake)
                 time.sleep(delay)
 
         if train:
             self.backtrace(episode)
 
-    def greedy_pi(self, q, state):
-        a_star = max(q, key=q.get)
-        actions = Environment.available_actions(env.direction(state))
-        res = [a_star]
-        res.extend(a for a in actions if a != a_star)
-        self.pi[state] = res
+    def greedy_pi(self, qs, state):
+        a_star = max(qs, key=qs.get)
+        actions = Environment.available_actions(self.env.direction(state))
+        return swap_positions(actions, 0, actions.index(a_star))
 
     def backtrace(self, episode):
         G = 0
@@ -340,19 +354,22 @@ class MonteCarloEpsilonGreedy:
                 ret[1] += 1
                 q = self.Q.setdefault(state, {})
                 q[action] = ret[0] / ret[1]
-                self.greedy_pi(q, state)
+                self.pi[state] = self.greedy_pi(q, state)
 
-    def run(self, train=True, visual=True, delay=1):
+    def run(self, train=True, delay=1):
         if not train:
+            if not os.path.isfile("Q.pkl"):
+                print("Error: file Q.pkl not found, did you train the snake?")
+                sys.exit(-1)
             with open("Q.pkl", "rb") as f:
-                self.Q = pickle.load(f)
-                for state, q in self.Q.items():
-                    self.greedy_pi(q, state)
+                epi, self.Q = pickle.load(f)
+                for state, qs in self.Q.items():
+                    self.pi[state] = self.greedy_pi(qs, state)
                 self.print_stat(0)
 
         try:
             for epi in itertools.count():  # while True
-                self.run_episode(train, visual, delay)
+                self.run_episode(train, delay)
                 if train and epi % 1000 == 0:
                     self.print_stat(epi)
 
@@ -360,7 +377,7 @@ class MonteCarloEpsilonGreedy:
             print("\r")
             if train:
                 with open("Q.pkl", "wb") as f:
-                    pickle.dump(self.Q, f)
+                    pickle.dump((epi, self.Q), f)
 
     def print_stat(self, epi):
         print(
@@ -376,7 +393,7 @@ class MonteCarloEpsilonGreedy:
 
 def debug(game, env):
     key = None
-    snake = Snake(Snake.gen_head(env), env.grow)
+    snake = Snake(env)
 
     print("INIT")
     _, state = env.state(snake)
@@ -404,10 +421,10 @@ def debug(game, env):
         else:
             continue
 
-        snake.move(key, env)
+        snake.move(key)
 
         # Game Over conditions
-        if not env.check_borders(snake) or env.score == env.x * env.y - 1:
+        if not env.check_borders(snake) or len(snake.body) == env.x * env.y:
             game_over()
 
         plot_game(game, env, snake)
@@ -432,7 +449,8 @@ if __name__ == "__main__":
         dest="train",
         default=False,
         action=argparse.BooleanOptionalAction,
-        help="Train and save Q.pkl in current directory, load it when not `train`. \nTo stop training press `Ctrl-C`.",
+        help="Train and save Q.pkl in current directory,\
+load it when not `train`. \nTo stop training press `Ctrl-C`.",
     )
     parser.add_argument(
         "--visual",
@@ -476,15 +494,21 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
+    if not args.train:
+        args.visual = True
 
     env = Environment(args.x, args.y, args.brick, args.grow)
 
-    # Initialize game window
-    pygame.display.set_caption("Snake")
-    game = pygame.display.set_mode((args.x * args.brick, args.y * args.brick))
+    game = None
+    if args.visual:
+        # Initialize game window
+        pygame.display.set_caption("Snake")
+        game = pygame.display.set_mode(
+            (args.x * args.brick, args.y * args.brick)
+        )
 
     if args.debug:
         debug(game, env)
     else:
         alg = MonteCarloEpsilonGreedy(game, env, eps=0.1)
-        alg.run(train=args.train, visual=args.visual, delay=args.delay)
+        alg.run(train=args.train, delay=args.delay)
