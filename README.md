@@ -3,40 +3,30 @@ Some reinforcement learning algorithms to play snake game taken from Sutton's bo
 
 ## Usage
 
-```$ python snake.py  --help
-usage: snake.py [-h] [--train | --no-train] [--visual | --no-visual] [--delay DELAY] [--brick BRICK] [--x X] [--y Y] [--grow | --no-grow] [--debug | --no-debug]
-
-optional arguments:
-  -h, --help            show this help message and exit
-  --train, --no-train   Train and save Q.pkl in current directory, load it when not `train`.
-                        To stop training press `Ctrl-C`. (default: False)
-  --visual, --no-visual
-  --delay DELAY         controls snake speed in visual mode
-  --brick BRICK         size of a grid cell in pixels
-  --x X                 frame `x` size in bricks
-  --y Y                 frame `y` size in bricks
-  --grow, --no-grow     whether to grow snake on eating a target (default: False)
-  --debug, --no-debug   move snake by7 hand and see it's state (default: False)
+```bash
+$ python snake.py --help
 ```
 
-## Monte Carlo Control with Exploring starts (epsilon greedy)
+## Algorithms
+
+1. Monte Carlo Control with Exploring starts
+2. SARSA
+3. Q-learning
 
 ### Non-growing snake
 ```python
-python snake.py --train --x=5 --y=5
+python snake.py --train --x=5 --y=5 --algo=sarsa
 ```
 
 It is enough to train non-growing snake on a 5x5 grid to be able to use it on arbitrary large grid. \
 The more you train the better it becomes. Test it:
 ```python
-python snake.py --visual --x=10 --y=10
+python snake.py --visual --x=10 --y=10 --algo=sarsa
 ```
-
-![](etc/mc-es-nogrow.gif)
 
 ### Growing snake
 ```python
-python snake.py --train --x=5 --y=5 --grow
+python snake.py --train --x=5 --y=5 --grow --algo=sarsa
 ```
 
 Additional 9 boolean indicators are added to a snake's state for each cell around a head, indicating if cell belongs to a snake. So snake is myopic in terms of what it can see. Adding all grid cells is not tractable due to enourmouse ammount of possible states.
@@ -44,7 +34,28 @@ Additional 9 boolean indicators are added to a snake's state for each cell aroun
 ![](etc/head-state.png)
 
 ```python
-python snake.py --visual --x=5 --y=5 --grow --delay=0.3
+python snake.py --visual --x=5 --y=5 --grow --delay=0.3 --algo=sarsa
 ```
 
-![](etc/mc-wes-grow.gif)
+### Compare
+
+Left to right: Monte Carlo, SARSA, QLearning
+
+<img src="etc/mc-single.gif" title="Monte Carlo (single)" width="200"/> <img src="etc/sarsa-single.gif" title="SARSA (single)" width="200"/> <img src="etc/ql-single.gif" title="QLearning (single)" width="200"/>
+
+<img src="etc/mc-growing.gif" title="Monte Carlo (growing)"/> <img src="etc/sarsa-growing.gif" title="SARSA (growing)"/> <img src="etc/ql-growing.gif" title="QLearning (growing)"/>
+
+
+### Parameters
+
+|             | Monte Carlo | SARSA | QLearning |
+|-------------|-------------|-------|-----------|
+| **SINGLE**  |             |       |           |
+| epsilon     | 0.5         | 0.3   | 0.5       |
+| alpha       | ---         | 0.05  | 0.005     |
+| episodes    | 1080k       | 2044k | 1030k     |
+|-------------|-------------|-------|-----------|
+| **GROWING** |             |       |           |
+| epsilon     | 0.05        |       |           |
+| alpha       | ---         |       |           |
+| episodes    |             |       |           |

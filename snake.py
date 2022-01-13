@@ -56,6 +56,28 @@ load it when not `train`. \nTo stop training press `Ctrl-C`.",
         action=argparse.BooleanOptionalAction,
         help="Move snake by7 hand and see it's state",
     )
+    parser.add_argument(
+        "--algo",
+        default="sarsa",
+        const="sarsa",
+        nargs="?",
+        choices=["mc", "sarsa", "ql"],
+        help="algorithm (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--epsilon",
+        dest="epsilon",
+        default=0.1,
+        type=float,
+        help="Exploration strength",
+    )
+    parser.add_argument(
+        "--alpha",
+        dest="alpha",
+        default=0.05,
+        type=float,
+        help="temporal difference step size",
+    )
 
     args = parser.parse_args()
     if not args.train:
@@ -74,5 +96,20 @@ load it when not `train`. \nTo stop training press `Ctrl-C`.",
     if args.debug:
         control.debug(game, env)
     else:
-        alg = control.MonteCarlo(game, env, eps=0.1)
+        if args.algo == "mc":
+            alg = control.MonteCarlo(game, env, epsilon=args.epsilon)
+        elif args.algo == "sarsa":
+            alg = control.Sarsa(
+                game, env, epsilon=args.epsilon, alpha=args.alpha
+            )
+        elif args.algo == "ql":
+            alg = control.QLearning(
+                game,
+                env,
+                epsilon=args.epsilon,
+                alpha=args.alpha,
+            )
+        else:
+            raise NotImplementedError(args.algo)
+
         alg.run(train=args.train, delay=args.delay)

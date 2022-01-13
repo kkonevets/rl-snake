@@ -10,11 +10,11 @@ import pygame
 from models import Snake, Environment, plot_game
 
 
-def epsilon_soft_choices(n, m, eps):
+def epsilon_soft_choices(n, m, epsilon):
     """choose n random integers 0<=x<m from epsilon-soft distribution,
     first element has the biggest probability"""
-    p_soft = np.full(m, eps / m)
-    p_soft[0] = 1 - eps + eps / m
+    p_soft = np.full(m, epsilon / m)
+    p_soft[0] = 1 - epsilon + epsilon / m
     return np.random.choice(m, size=n, p=p_soft)
 
 
@@ -31,12 +31,12 @@ def ddf():
 class Control:
     "Base class for optimal control algorithms"
 
-    def __init__(self, game, env, eps=0.1):
-        self.game, self.env, self.eps = game, env, eps
+    def __init__(self, game, env, epsilon=0.1):
+        self.game, self.env, self.epsilon = game, env, epsilon
         self.pi, self.Q = {}, defaultdict(ddf)
         # prechoose big number of random numbers 0<=x<3 (optimization)
         # 3 available actions: [forward, left, right]
-        self.choices = epsilon_soft_choices(1000 * (env.x + env.y), 3, eps)
+        self.choices = epsilon_soft_choices(1000 * (env.x + env.y), 3, epsilon)
 
     def epsilon_soft_action(self, actions: list, step, train):
         "Choose action according to epsilon-soft distribution"
@@ -53,9 +53,9 @@ class Control:
 
     def greedy_actions(self, state, qs):
         """Select action with max value and set it to be first in action list"""
-        a_star = max(qs, key=qs.get)
         actions = Environment.available_actions(self.env.direction(state))
-        return swap_positions(actions, 0, actions.index(a_star))
+        a_max = max(qs, key=qs.get)
+        return swap_positions(actions, 0, actions.index(a_max))
 
     def run_episode(self, snake, train=True, delay=1):
         raise NotImplementedError("Abstarct method, override in subclass")
@@ -107,8 +107,8 @@ class Control:
 
 
 class MonteCarlo(Control):
-    def __init__(self, game, env, eps=0.1):
-        super().__init__(game, env, eps)
+    def __init__(self, game, env, epsilon=0.1):
+        super().__init__(game, env, epsilon)
 
         self.Returns = defaultdict(lambda: [0, 0])
 
@@ -126,11 +126,11 @@ class MonteCarlo(Control):
                     actions = Environment.available_actions(direction, True)
 
             action = self.epsilon_soft_action(actions, step, train)
-            snake.move(action)
-
             if train:
                 reward = self.env.reward(snake, state, state_vec, action)
                 episode.append((state, action, reward))
+
+            snake.move(action)
 
             if self.is_game_over(snake):
                 self.env.score = 0
@@ -160,6 +160,88 @@ class MonteCarlo(Control):
                 qs = self.Q[state]
                 qs[action] = ret[0] / ret[1]
                 self.pi[state] = self.greedy_actions(state, qs)
+
+
+class TemporalDifference(Control):
+    def __init__(self, game, env, epsilon=0.1, alpha=0.05):
+        super().__init__(game, env, epsilon)
+        self.alpha = alpha
+
+    def epsilon_greedy_action(self, qs, state, step, train: bool):
+        if (step == 0 and train) or len(qs) == 0:  # exploring start
+            actions = Environment.available_actions(
+                self.env.direction(state), True
+            )
+        else:
+            actions = self.greedy_actions(state, qs)
+        return self.epsilon_soft_action(actions, step, train)
+
+    def state_actions(self, snake):
+        state_vec, state = self.env.state(snake)
+        return state_vec, state, self.Q[state]
+
+
+class Sarsa(TemporalDifference):
+    def __init__(self, game, env, epsilon=0.1, alpha=0.05):
+        super().__init__(game, env, epsilon, alpha)
+
+    def run_episode(self, snake, train=True, delay=1):
+        state_vec1, state1, qs1 = self.state_actions(snake)
+        action1 = self.epsilon_greedy_action(qs1, state1, 0, train)
+
+        for step in itertools.count(1):  # while True
+            if train:
+                reward = self.env.reward(snake, state1, state_vec1, action1)
+
+            snake.move(action1)
+
+            state_vec2, state2, qs2 = self.state_actions(snake)
+            action2 = self.epsilon_greedy_action(qs2, state2, step, train)
+
+            if train:
+                q1 = qs1[action1]
+                qs1[action1] = q1 + self.alpha * (reward + qs2[action2] - q1)
+
+            state_vec1, state1, qs1, action1 = state_vec2, state2, qs2, action2
+
+            if self.is_game_over(snake):
+                self.env.score = 0
+                break
+
+            if self.game:
+                plot_game(self.game, self.env, snake)
+                time.sleep(delay)
+
+
+class QLearning(TemporalDifference):
+    def __init__(self, game, env, epsilon=0.1, alpha=0.05):
+        super().__init__(game, env, epsilon, alpha)
+
+    def run_episode(self, snake, train=True, delay=1):
+        state_vec1, state1, qs1 = self.state_actions(snake)
+
+        for step in itertools.count(0):  # while True
+            action = self.epsilon_greedy_action(qs1, state1, step, train)
+            if train:
+                reward = self.env.reward(snake, state1, state_vec1, action)
+
+            snake.move(action)
+            state_vec2, state2, qs2 = self.state_actions(snake)
+
+            if train:
+                q1 = qs1[action]
+                q2_max = max(qs2.values(), default=0)
+                qs1[action] = q1 + self.alpha * (reward + q2_max - q1)
+
+            state_vec1, state1, qs1 = state_vec2, state2, qs2
+
+            if self.is_game_over(snake):
+                self.env.score = 0
+                break
+
+            if self.game:
+                plot_game(self.game, self.env, snake)
+                time.sleep(delay)
 
 
 def debug(game, env):

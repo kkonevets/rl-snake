@@ -194,6 +194,7 @@ class Environment:
             raise NotImplementedError(direction)
 
     def reward(self, snake, state, state_vec, action):
+        "reward if take action from state"
         next_pos = [snake.head[0], snake.head[1]]  # copy head
         if not snake.move_pos(next_pos, action):  # move copied head
             return 0
