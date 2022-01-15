@@ -75,7 +75,8 @@ class Control:
                 epi, self.Q = pickle.load(f)
                 start = epi
                 for state, qs in self.Q.items():
-                    self.pi[state] = self.greedy_actions(state, qs)
+                    if len(qs):
+                        self.pi[state] = self.greedy_actions(state, qs)
                 self.print_stat(epi)
 
         try:
@@ -94,19 +95,15 @@ class Control:
                 with open("Q.pkl", "wb") as f:
                     pickle.dump((epi, self.Q), f)
 
-    def is_game_over(self, snake):
-        "game over conditions"
-        return (
-            not self.env.check_borders(snake)
-            or len(snake.body) == self.env.x * self.env.y
-        )
-
     def count(self, start, snake, delay):
         "a wrapper to check game over conditions and game plotting"
         for step in itertools.count(start):
             yield step
 
-            if self.is_game_over(snake):
+            if (  # game over condition
+                not self.env.check_borders(snake)
+                or len(snake.body) == self.env.x * self.env.y
+            ):
                 self.env.score = 0
                 break
 
@@ -127,13 +124,8 @@ class Control:
 
 
 class MonteCarlo(Control):
-    def __init__(
-        self,
-        game,
-        env,
-        epsilon=0.1,
-    ):
-        super().__init__(game, env, epsilon)
+    def __init__(self, game, env, epsilon=0.1, load=False):
+        super().__init__(game, env, epsilon, load)
 
         self.Returns = defaultdict(lambda: [0, 0])
 
@@ -180,8 +172,8 @@ class MonteCarlo(Control):
 
 
 class TemporalDifference(Control):
-    def __init__(self, game, env, epsilon=0.1, alpha=0.05):
-        super().__init__(game, env, epsilon)
+    def __init__(self, game, env, epsilon=0.1, alpha=0.05, load=False):
+        super().__init__(game, env, epsilon, load)
         self.alpha = alpha
 
     def epsilon_greedy_action(self, qs, state, step, train: bool):
@@ -199,8 +191,8 @@ class TemporalDifference(Control):
 
 
 class Sarsa(TemporalDifference):
-    def __init__(self, game, env, epsilon=0.1, alpha=0.05):
-        super().__init__(game, env, epsilon, alpha)
+    def __init__(self, game, env, epsilon=0.1, alpha=0.05, load=False):
+        super().__init__(game, env, epsilon, alpha, load)
 
     def run_episode(self, snake, train=True, delay=1):
         state_vec1, state1, qs1 = self.state_actions(snake)
@@ -223,8 +215,8 @@ class Sarsa(TemporalDifference):
 
 
 class QLearning(TemporalDifference):
-    def __init__(self, game, env, epsilon=0.1, alpha=0.05):
-        super().__init__(game, env, epsilon, alpha)
+    def __init__(self, game, env, epsilon=0.1, alpha=0.05, load=False):
+        super().__init__(game, env, epsilon, alpha, load)
 
     def run_episode(self, snake, train=True, delay=1):
         state_vec1, state1, qs1 = self.state_actions(snake)

@@ -58,6 +58,6 @@ Left to right: Monte Carlo, SARSA, QLearning
 | episodes    | 1080k       | 2044k | 1030k     |
 |-------------|-------------|-------|-----------|
 | **GROWING** |             |       |           |
-| epsilon     | 0.05        |       |           |
-| alpha       | ---         |       |           |
-| episodes    | 4152k       |       |           |
+| epsilon     | 0.05        | 0.05  | 0.1       |
+| alpha       | ---         | 0.05  | 0.0005    |
+| episodes    | 4152k       | 1559k | 2023k     |
