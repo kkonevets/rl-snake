@@ -31,8 +31,13 @@ def ddf():
 class Control:
     "Base class for optimal control algorithms"
 
-    def __init__(self, game, env, epsilon=0.1):
-        self.game, self.env, self.epsilon = game, env, epsilon
+    def __init__(self, game, env, epsilon=0.1, load=True):
+        self.game, self.env, self.epsilon, self.load = (
+            game,
+            env,
+            epsilon,
+            load,
+        )
         self.pi, self.Q = {}, defaultdict(ddf)
         # prechoose big number of random numbers 0<=x<3 (optimization)
         # 3 available actions: [forward, left, right]
@@ -61,18 +66,20 @@ class Control:
         raise NotImplementedError("Abstarct method, override in subclass")
 
     def run(self, train=True, delay=1):
-        if not train:
+        start = 0
+        if not train or self.load:
             if not os.path.isfile("Q.pkl"):
                 print("Error: file Q.pkl not found, did you train the snake?")
                 sys.exit(-1)
             with open("Q.pkl", "rb") as f:
                 epi, self.Q = pickle.load(f)
+                start = epi
                 for state, qs in self.Q.items():
                     self.pi[state] = self.greedy_actions(state, qs)
                 self.print_stat(epi)
 
         try:
-            for epi in itertools.count():  # while True
+            for epi in itertools.count(start):  # while True
                 snake = Snake(self.env)
                 if self.game:
                     plot_game(self.game, self.env, snake)
@@ -120,7 +127,12 @@ class Control:
 
 
 class MonteCarlo(Control):
-    def __init__(self, game, env, epsilon=0.1):
+    def __init__(
+        self,
+        game,
+        env,
+        epsilon=0.1,
+    ):
         super().__init__(game, env, epsilon)
 
         self.Returns = defaultdict(lambda: [0, 0])

@@ -17,10 +17,18 @@ if __name__ == "__main__":
 load it when not `train`. \nTo stop training press `Ctrl-C`.",
     )
     parser.add_argument(
+        "--load",
+        dest="load",
+        default=False,
+        action=argparse.BooleanOptionalAction,
+        help="Continue training after loading action-value file",
+    )
+    parser.add_argument(
         "--visual",
         dest="visual",
         default=False,
         action=argparse.BooleanOptionalAction,
+        help="Display game while training or testing",
     )
     parser.add_argument(
         "--delay",
@@ -97,10 +105,16 @@ load it when not `train`. \nTo stop training press `Ctrl-C`.",
         control.debug(game, env)
     else:
         if args.algo == "mc":
-            alg = control.MonteCarlo(game, env, epsilon=args.epsilon)
+            alg = control.MonteCarlo(
+                game, env, epsilon=args.epsilon, load=args.load
+            )
         elif args.algo == "sarsa":
             alg = control.Sarsa(
-                game, env, epsilon=args.epsilon, alpha=args.alpha
+                game,
+                env,
+                epsilon=args.epsilon,
+                alpha=args.alpha,
+                load=args.load,
             )
         elif args.algo == "ql":
             alg = control.QLearning(
@@ -108,6 +122,7 @@ load it when not `train`. \nTo stop training press `Ctrl-C`.",
                 env,
                 epsilon=args.epsilon,
                 alpha=args.alpha,
+                load=args.load,
             )
         else:
             raise NotImplementedError(args.algo)
