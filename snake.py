@@ -54,7 +54,7 @@ load it when not `train`. \nTo stop training press `Ctrl-C`.",
         dest="debug",
         default=False,
         action=argparse.BooleanOptionalAction,
-        help="Move snake by7 hand and see it's state",
+        help="Move snake by hand and see it's state",
     )
     parser.add_argument(
         "--algo",
@@ -76,7 +76,7 @@ load it when not `train`. \nTo stop training press `Ctrl-C`.",
         dest="alpha",
         default=0.05,
         type=float,
-        help="temporal difference step size",
+        help="Temporal difference step size",
     )
 
     args = parser.parse_args()

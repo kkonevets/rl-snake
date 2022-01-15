@@ -9,7 +9,7 @@ $ python snake.py --help
 
 ## Algorithms
 
-1. Monte Carlo Control with Exploring starts
+1. Monte Carlo
 2. SARSA
 3. Q-learning
 
@@ -58,4 +58,4 @@ Left to right: Monte Carlo, SARSA, QLearning
 | **GROWING** |             |       |           |
 | epsilon     | 0.05        |       |           |
 | alpha       | ---         |       |           |
-| episodes    |             |       |           |
+| episodes    | 4152k       |       |           |

@@ -94,6 +94,19 @@ class Control:
             or len(snake.body) == self.env.x * self.env.y
         )
 
+    def count(self, start, snake, delay):
+        "a wrapper to check game over conditions and game plotting"
+        for step in itertools.count(start):
+            yield step
+
+            if self.is_game_over(snake):
+                self.env.score = 0
+                break
+
+            if self.game:
+                plot_game(self.game, self.env, snake)
+                time.sleep(delay)
+
     def print_stat(self, epi):
         print(
             "Episode %i, # of states %i, # of state-value pairs: %i\r"
@@ -114,7 +127,7 @@ class MonteCarlo(Control):
 
     def run_episode(self, snake, train=True, delay=1):
         episode = []
-        for step in itertools.count():  # while True
+        for step in self.count(0, snake, delay):  # while True
             state_vec, state = self.env.state(snake)
             direction = self.env.direction(state)
 
@@ -131,14 +144,6 @@ class MonteCarlo(Control):
                 episode.append((state, action, reward))
 
             snake.move(action)
-
-            if self.is_game_over(snake):
-                self.env.score = 0
-                break
-
-            if self.game:
-                plot_game(self.game, self.env, snake)
-                time.sleep(delay)
 
         if train:
             self.backtrace(episode)
@@ -189,7 +194,7 @@ class Sarsa(TemporalDifference):
         state_vec1, state1, qs1 = self.state_actions(snake)
         action1 = self.epsilon_greedy_action(qs1, state1, 0, train)
 
-        for step in itertools.count(1):  # while True
+        for step in self.count(1, snake, delay):  # while True
             if train:
                 reward = self.env.reward(snake, state1, state_vec1, action1)
 
@@ -204,14 +209,6 @@ class Sarsa(TemporalDifference):
 
             state_vec1, state1, qs1, action1 = state_vec2, state2, qs2, action2
 
-            if self.is_game_over(snake):
-                self.env.score = 0
-                break
-
-            if self.game:
-                plot_game(self.game, self.env, snake)
-                time.sleep(delay)
-
 
 class QLearning(TemporalDifference):
     def __init__(self, game, env, epsilon=0.1, alpha=0.05):
@@ -220,7 +217,7 @@ class QLearning(TemporalDifference):
     def run_episode(self, snake, train=True, delay=1):
         state_vec1, state1, qs1 = self.state_actions(snake)
 
-        for step in itertools.count(0):  # while True
+        for step in self.count(0, snake, delay):  # while True
             action = self.epsilon_greedy_action(qs1, state1, step, train)
             if train:
                 reward = self.env.reward(snake, state1, state_vec1, action)
@@ -234,14 +231,6 @@ class QLearning(TemporalDifference):
                 qs1[action] = q1 + self.alpha * (reward + q2_max - q1)
 
             state_vec1, state1, qs1 = state_vec2, state2, qs2
-
-            if self.is_game_over(snake):
-                self.env.score = 0
-                break
-
-            if self.game:
-                plot_game(self.game, self.env, snake)
-                time.sleep(delay)
 
 
 def debug(game, env):
