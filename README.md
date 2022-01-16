@@ -12,8 +12,8 @@ $ python snake.py --help
 ### Tabular
 
 1. Monte Carlo
-2. SARSA
-3. Q-learning
+2. one-step SARSA
+3. one step Q-learning
 
 ### Non-growing snake
 ```python
@@ -45,7 +45,7 @@ Left to right: Monte Carlo, SARSA, QLearning
 
 <img src="etc/mc-single.gif" title="Monte Carlo (single)" width="200"/> <img src="etc/sarsa-single.gif" title="SARSA (single)" width="200"/> <img src="etc/ql-single.gif" title="QLearning (single)" width="200"/>
 
-<img src="etc/mc-growing.gif" title="Monte Carlo (growing)"/> <img src="etc/sarsa-growing.gif" title="SARSA (growing)"/> <img src="etc/ql-growing.gif" title="QLearning (growing)"/>
+<img src="etc/mc-growing.gif" title="Monte Carlo (growing)" width="200"/> <img src="etc/sarsa-growing.gif" title="SARSA (growing)" width="200"/> <img src="etc/ql-growing.gif" title="QLearning (growing)" width="200"/>
 
 
 ### Parameters
