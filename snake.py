@@ -79,6 +79,13 @@ load it when not `train`. \nTo stop training press `Ctrl-C`.",
         type=float,
         help="Temporal difference step size",
     )
+    parser.add_argument(
+        "--steps",
+        dest="steps",
+        default=4,
+        type=int,
+        help="Number of steps for temporal difference method (n-step sarsa)",
+    )
 
     args = parser.parse_args()
     env = Environment(args.x, args.y, args.brick, args.grow)
@@ -98,11 +105,19 @@ load it when not `train`. \nTo stop training press `Ctrl-C`.",
             alg = control.MonteCarlo(game, env, epsilon=args.epsilon)
         elif args.algo == "sarsa":
             alg = control.Sarsa(
-                game, env, epsilon=args.epsilon, alpha=args.alpha
+                game,
+                env,
+                n=args.steps,
+                epsilon=args.epsilon,
+                alpha=args.alpha,
             )
         elif args.algo == "ql":
             alg = control.QLearning(
-                game, env, epsilon=args.epsilon, alpha=args.alpha
+                game,
+                env,
+                n=args.steps,
+                epsilon=args.epsilon,
+                alpha=args.alpha,
             )
         else:
             raise NotImplementedError(args.algo)

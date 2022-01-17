@@ -11,6 +11,7 @@ import os
 import numpy as np
 import sys
 import pygame
+from termcolor import colored
 
 from models import Snake, plot_game
 
@@ -43,6 +44,7 @@ class Control:
         # prechoose big number of random numbers 0<=x<3 (optimization)
         # 3 available actions: [forward, left, right]
         self.choices = epsilon_soft_choices(1000 * (env.x + env.y), 3, epsilon)
+        assert epsilon > 0
 
     def epsilon_soft_action(self, actions: list, step):
         "Choose action according to epsilon-soft distribution"
@@ -82,7 +84,7 @@ class Control:
             for epi in itertools.count(start):  # while True
                 snake = Snake(self.env)
                 plot_game(self.game, self.env, snake)
-                for step in self.count(0, snake):  # while not game over
+                for step in self.count(snake):  # while not game over
                     _, state = self.env.state(snake)
 
                     actions = self.pi.get(state)
@@ -110,9 +112,9 @@ class Control:
             with open("Q.pkl", "wb") as f:
                 pickle.dump((epi, self.Q), f)
 
-    def count(self, start, snake):
+    def count(self, snake):
         "a wrapper to count steps and check game over conditions"
-        for step in itertools.count(start):
+        for step in itertools.count():
             yield step
 
             if self.env.is_game_over(snake):
@@ -138,8 +140,8 @@ class MonteCarlo(Control):
 
     def run_episode(self, snake):
         episode = []
-        for step in self.count(0, snake):  # while not game over
-            state_vec, state = self.env.state(snake)
+        for step in self.count(snake):  # while not game over
+            svec, state = self.env.state(snake)
 
             if step == 0:  # exploring start
                 actions = self.env.available_actions(state, True)
@@ -149,7 +151,7 @@ class MonteCarlo(Control):
                     actions = self.env.available_actions(state, True)
 
             action = self.epsilon_soft_action(actions, step)
-            reward = self.env.reward(snake, state, state_vec, action)
+            reward = self.env.reward(snake, state, svec, action)
             episode.append((state, action, reward))
 
             snake.move(action)
@@ -176,9 +178,12 @@ class MonteCarlo(Control):
 
 
 class TemporalDifference(Control):
-    def __init__(self, game, env, epsilon=0.1, alpha=0.05):
+    def __init__(self, game, env, n=1, epsilon=0.1, alpha=0.05):
         super().__init__(game, env, epsilon)
+        assert 0 < alpha <= 1
+        assert n > 0
         self.alpha = alpha
+        self.n = n
 
     def epsilon_greedy_action(self, qs, state, step):
         if step == 0 or len(qs) == 0:  # exploring start
@@ -188,8 +193,8 @@ class TemporalDifference(Control):
         return self.epsilon_soft_action(actions, step)
 
     def state_actions(self, snake):
-        state_vec, state = self.env.state(snake)
-        return state_vec, state, self.Q[state]
+        svec, state = self.env.state(snake)
+        return svec, state, self.Q[state]
 
 
 class Sarsa(TemporalDifference):
@@ -197,42 +202,62 @@ class Sarsa(TemporalDifference):
         super().__init__(game, env, **kwargs)
 
     def run_episode(self, snake):
-        state_vec1, state1, qs1 = self.state_actions(snake)
+        svec1, state1, qs1 = self.state_actions(snake)
         action1 = self.epsilon_greedy_action(qs1, state1, 0)
+        episode = [(qs1, action1)]
+        rewards = [0]
+        T = 1 << 256  # the infinity
 
-        for step in self.count(1, snake):  # while not game over
-            reward = self.env.reward(snake, state1, state_vec1, action1)
+        for step in itertools.count():
+            if step < T:
+                rewards.append(self.env.reward(snake, state1, svec1, action1))
+                snake.move(action1)
+                svec2, state2, qs2 = self.state_actions(snake)
 
-            snake.move(action1)
+                if self.env.is_game_over(snake):
+                    T = step + 1
+                else:
+                    action2 = self.epsilon_greedy_action(qs2, state2, step + 1)
+                    episode.append((qs2, action2))
+                    svec1, state1, qs1, action1 = (svec2, state2, qs2, action2)
 
-            state_vec2, state2, qs2 = self.state_actions(snake)
-            action2 = self.epsilon_greedy_action(qs2, state2, step)
+            tau = step - self.n + 1
+            if tau >= 0:
+                G = sum(rewards[tau + 1 : min(tau + self.n, T) + 1])
+                if tau + self.n < T:
+                    G += qs2[action2]
+                qs, action = episode[tau]
+                q = qs[action]
+                qs[action] = q + self.alpha * (G - q)
 
-            q1 = qs1[action1]
-            qs1[action1] = q1 + self.alpha * (reward + qs2[action2] - q1)
-
-            state_vec1, state1, qs1, action1 = state_vec2, state2, qs2, action2
+            if tau == T - 1:
+                break
 
 
 class QLearning(TemporalDifference):
     def __init__(self, game, env, **kwargs):
         super().__init__(game, env, **kwargs)
+        if kwargs["n"] != 1:
+            msg = (
+                "n-step QLearning is not implemented yet, defaulting to 1-step"
+            )
+            print(colored(msg, "yellow"))
 
     def run_episode(self, snake):
-        state_vec1, state1, qs1 = self.state_actions(snake)
+        svec1, state1, qs1 = self.state_actions(snake)
 
-        for step in self.count(0, snake):  # while not game over
+        for step in self.count(snake):  # while not game over
             action = self.epsilon_greedy_action(qs1, state1, step)
-            reward = self.env.reward(snake, state1, state_vec1, action)
+            reward = self.env.reward(snake, state1, svec1, action)
 
             snake.move(action)
-            state_vec2, state2, qs2 = self.state_actions(snake)
+            svec2, state2, qs2 = self.state_actions(snake)
 
             q1 = qs1[action]
             q2_max = max(qs2.values(), default=0)
             qs1[action] = q1 + self.alpha * (reward + q2_max - q1)
 
-            state_vec1, state1, qs1 = state_vec2, state2, qs2
+            svec1, state1, qs1 = svec2, state2, qs2
 
 
 def debug(game, env):
@@ -270,14 +295,14 @@ def debug(game, env):
 
         plot_game(game, env, snake)
 
-        state_vec, state = env.state(snake)
+        svec, state = env.state(snake)
         print(
             "state %s, Reward if moving (LEFT, RIGHT, UP, DOWN): (%i, %i, %i, %i)"
             % (
                 "{0:b}".format(state)[::-1],
-                env.reward(snake, state, state_vec, pygame.K_LEFT),
-                env.reward(snake, state, state_vec, pygame.K_RIGHT),
-                env.reward(snake, state, state_vec, pygame.K_UP),
-                env.reward(snake, state, state_vec, pygame.K_DOWN),
+                env.reward(snake, state, svec, pygame.K_LEFT),
+                env.reward(snake, state, svec, pygame.K_RIGHT),
+                env.reward(snake, state, svec, pygame.K_UP),
+                env.reward(snake, state, svec, pygame.K_DOWN),
             ),
         )
