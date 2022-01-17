@@ -2,6 +2,7 @@ import sys
 import random
 import numpy as np
 import pygame
+import copy
 
 
 class Color:
@@ -10,6 +11,18 @@ class Color:
     WHITE = pygame.Color(255, 255, 255)
     RED = pygame.Color(255, 0, 0)
     GREEN = pygame.Color(0, 255, 0)
+
+
+class Point:
+    def __init__(self, x, y):
+        self.x, self.y = x, y
+
+    def __eq__(self, other):
+        return self.x == other.x and self.y == other.y
+
+    def __repr__(self):
+        # display x and y instead of address
+        return f"(x={self.x}, y={self.y})"
 
 
 class Snake:
@@ -21,31 +34,33 @@ class Snake:
         while self.head == env.food_pos:
             self.head = env.gen_point()
 
-        self.body = [list(self.head)]
+        self.body = [copy.copy(self.head)]
         # get random direction: LEFT, RIGHT, UP, DOWN
         self.direction = random.randrange(pygame.K_RIGHT, pygame.K_UP + 1)
 
+        self._opposite = (
+            [pygame.K_RIGHT, pygame.K_LEFT],
+            [pygame.K_DOWN, pygame.K_UP],
+        )
+
     def food_dist(self):
         "Return L1 distance to a food point"
-        dx = abs(self.head[0] - self.env.food_pos[0])
-        dy = abs(self.head[1] - self.env.food_pos[1])
+        dx = abs(self.head.x - self.env.food_pos.x)
+        dy = abs(self.head.y - self.env.food_pos.y)
         return dx + dy
 
     def move_pos(self, pos, key):
-        if sorted((key, self.direction)) in (
-            [pygame.K_RIGHT, pygame.K_LEFT],
-            [pygame.K_DOWN, pygame.K_UP],
-        ):
+        if sorted((key, self.direction)) in self._opposite:
             return False  # can't move in opposite direction
 
         if key == pygame.K_UP:
-            pos[1] -= 1
+            pos.y -= 1
         elif key == pygame.K_LEFT:
-            pos[0] -= 1
+            pos.x -= 1
         elif key == pygame.K_DOWN:
-            pos[1] += 1
+            pos.y += 1
         elif key == pygame.K_RIGHT:
-            pos[0] += 1
+            pos.x += 1
         else:
             raise NotImplementedError(key)
 
@@ -59,7 +74,7 @@ class Snake:
         env = self.env
 
         # Snake body growing mechanism
-        self.body.insert(0, list(self.head))
+        self.body.insert(0, copy.copy(self.head))
         eat = self.head == env.food_pos
         if not env.grow or not eat:
             self.body.pop()
@@ -118,7 +133,7 @@ class Environment:
             - Boolean indicator if cell is empty for each cell around a head
         """
         state = [0] * self.state_size
-        x, y = snake.head
+        x, y = snake.head.x, snake.head.y
 
         if snake.direction == pygame.K_LEFT:
             state[0] = x < 1
@@ -143,10 +158,10 @@ class Environment:
         state[4] = snake.direction == pygame.K_RIGHT
         state[5] = snake.direction == pygame.K_UP
         state[6] = snake.direction == pygame.K_DOWN
-        state[7] = self.food_pos[0] < x
-        state[8] = self.food_pos[0] > x
-        state[9] = self.food_pos[1] < y
-        state[10] = self.food_pos[1] > y
+        state[7] = self.food_pos.x < x
+        state[8] = self.food_pos.x > x
+        state[9] = self.food_pos.y < y
+        state[10] = self.food_pos.y > y
         state[11] = snake.food_dist() == 1
 
         if self.grow:
@@ -155,7 +170,7 @@ class Environment:
             for i in (x - 1, x, x + 1):
                 for j in (y - 1, y, y + 1):
                     if (0 <= i < self.x) and (0 <= j < self.y):
-                        state[ix] = [i, j] in snake.body
+                        state[ix] = Point(i, j) in snake.body
                     ix += 1
 
         shash = 0
@@ -168,12 +183,12 @@ class Environment:
 
     def gen_point(self):
         "Generate random point"
-        return [random.randrange(0, self.x), random.randrange(0, self.y)]
+        return Point(random.randrange(0, self.x), random.randrange(0, self.y))
 
     def check_borders(self, snake: Snake):
         return (
-            (0 <= snake.head[0] < self.x)
-            and (0 <= snake.head[1] < self.y)
+            (0 <= snake.head.x < self.x)
+            and (0 <= snake.head.y < self.y)
             and snake.head not in snake.body[1:]  # Snake self intersection
         )
 
@@ -194,7 +209,7 @@ class Environment:
 
     def reward(self, snake, state, state_vec, action):
         "reward if take action from state"
-        next_pos = [snake.head[0], snake.head[1]]  # copy head
+        next_pos = copy.copy(snake.head)
         if not snake.move_pos(next_pos, action):  # move copied head
             return 0
 
@@ -247,8 +262,8 @@ def show_score(game, score):
 def plot_game(game, env, snake):
     game.fill(Color.BLACK)  # GFX
 
-    def my_rect(xy):
-        return pygame.Rect(xy[0] * brick, xy[1] * brick, brick, brick)
+    def my_rect(p: Point):
+        return pygame.Rect(p.x * brick, p.y * brick, brick, brick)
 
     brick = env.brick
     pygame.draw.rect(game, Color.WHITE, my_rect(snake.head))
