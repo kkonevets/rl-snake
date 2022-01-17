@@ -95,8 +95,7 @@ class Environment:
         # second number in tuple gives number of errors
         if check_errors[1] > 0:
             print(
-                f"[!] Had {check_errors[1]} errors\
-                when initialising game, exiting..."
+                f"[!] Had {check_errors[1]} errors when initialising game, exiting..."
             )
             sys.exit(-1)
 
@@ -222,12 +221,18 @@ class Environment:
 
         return 0
 
-    def available_actions(direction, shuffle=False):
+    def available_actions(self, state, shuffle=False):
+        direction = self.direction(state)
         l, r = Environment.direction_neigbs(direction)
         actions = [direction, l, r]
         if shuffle:
             np.random.shuffle(actions)
         return actions
+
+    def is_game_over(self, snake):
+        return (
+            not self.check_borders(snake) or len(snake.body) == self.x * self.y
+        )
 
 
 def show_score(game, score):

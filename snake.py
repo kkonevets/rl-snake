@@ -24,13 +24,6 @@ load it when not `train`. \nTo stop training press `Ctrl-C`.",
         help="Continue training after loading action-value file",
     )
     parser.add_argument(
-        "--visual",
-        dest="visual",
-        default=False,
-        action=argparse.BooleanOptionalAction,
-        help="Display game while training or testing",
-    )
-    parser.add_argument(
         "--delay",
         dest="delay",
         default=0.1,
@@ -88,13 +81,10 @@ load it when not `train`. \nTo stop training press `Ctrl-C`.",
     )
 
     args = parser.parse_args()
-    if not args.train:
-        args.visual = True
-
     env = Environment(args.x, args.y, args.brick, args.grow)
 
     game = None
-    if args.visual:
+    if not args.train:
         # Initialize game window
         pygame.display.set_caption("Snake")
         game = pygame.display.set_mode(
@@ -103,28 +93,21 @@ load it when not `train`. \nTo stop training press `Ctrl-C`.",
 
     if args.debug:
         control.debug(game, env)
-    else:
+    elif args.train:
         if args.algo == "mc":
-            alg = control.MonteCarlo(
-                game, env, epsilon=args.epsilon, load=args.load
-            )
+            alg = control.MonteCarlo(game, env, epsilon=args.epsilon)
         elif args.algo == "sarsa":
             alg = control.Sarsa(
-                game,
-                env,
-                epsilon=args.epsilon,
-                alpha=args.alpha,
-                load=args.load,
+                game, env, epsilon=args.epsilon, alpha=args.alpha
             )
         elif args.algo == "ql":
             alg = control.QLearning(
-                game,
-                env,
-                epsilon=args.epsilon,
-                alpha=args.alpha,
-                load=args.load,
+                game, env, epsilon=args.epsilon, alpha=args.alpha
             )
         else:
             raise NotImplementedError(args.algo)
 
-        alg.run(train=args.train, delay=args.delay)
+        alg.train(args.load)
+    else:
+        ctrl = control.Control(game, env, epsilon=args.epsilon)
+        ctrl.follow(delay=args.delay)

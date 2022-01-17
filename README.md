@@ -15,6 +15,8 @@ $ python snake.py --help
 2. one-step SARSA
 3. one step Q-learning
 
+To stop training press `Ctrl-C` and `Q.pkl` file will be saved in current directory. Then it can be used to continue training or to follow learned policy with visualization.
+
 ### Non-growing snake
 ```python
 python snake.py --train --x=5 --y=5 --algo=sarsa
@@ -23,7 +25,7 @@ python snake.py --train --x=5 --y=5 --algo=sarsa
 It is enough to train non-growing snake on a 5x5 grid to be able to use it on arbitrary large grid. \
 The more you train the better it becomes. Test it:
 ```python
-python snake.py --visual --x=10 --y=10 --algo=sarsa
+python snake.py --x=10 --y=10
 ```
 
 ### Growing snake
@@ -36,7 +38,7 @@ Additional 9 boolean indicators are added to a snake's state for each cell aroun
 ![](etc/head-state.png)
 
 ```python
-python snake.py --visual --x=5 --y=5 --grow --delay=0.3 --algo=sarsa
+python snake.py --x=5 --y=5 --grow --delay=0.3
 ```
 
 ### Compare
