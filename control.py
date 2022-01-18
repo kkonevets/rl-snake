@@ -98,19 +98,23 @@ class Control:
         except KeyboardInterrupt:
             pass
 
-    def train(self, load=False):
+    def train(self, max_episodes=0, load=False):
         start = self.loadQ() if load else 0
 
         try:
             for epi in itertools.count(start):  # while True
                 snake = Snake(self.env)
                 self.run_episode(snake)
-                if epi % 1000 == 0:
+                if epi % 5000 == 0:
                     self.print_stat(epi)
+                if 0 < max_episodes <= epi + 1:
+                    break
         except KeyboardInterrupt:
-            print("\r")
-            with open("Q.pkl", "wb") as f:
-                pickle.dump((epi, self.Q), f)
+            pass
+
+        print("\r")
+        with open("Q.pkl", "wb") as f:
+            pickle.dump((epi + 1, self.Q), f)
 
     def count(self, snake):
         "a wrapper to count steps and check game over conditions"
@@ -134,8 +138,8 @@ class Control:
 
 
 class MonteCarlo(Control):
-    def __init__(self, game, env, epsilon=0.1):
-        super().__init__(game, env, epsilon)
+    def __init__(self, game, env, **kwargs):
+        super().__init__(game, env, **kwargs)
         self.Returns = defaultdict(lambda: [0, 0])
 
     def run_episode(self, snake):
@@ -178,8 +182,8 @@ class MonteCarlo(Control):
 
 
 class TemporalDifference(Control):
-    def __init__(self, game, env, n=1, epsilon=0.1, alpha=0.05):
-        super().__init__(game, env, epsilon)
+    def __init__(self, game, env, n=1, alpha=0.05, **kwargs):
+        super().__init__(game, env, **kwargs)
         assert 0 < alpha <= 1
         assert n > 0
         self.alpha = alpha

@@ -86,6 +86,13 @@ load it when not `train`. \nTo stop training press `Ctrl-C`.",
         type=int,
         help="Number of steps for temporal difference method (n-step sarsa)",
     )
+    parser.add_argument(
+        "--episodes",
+        dest="episodes",
+        default=0,
+        type=int,
+        help="Maximum number of episodes to run",
+    )
 
     args = parser.parse_args()
     env = Environment(args.x, args.y, args.brick, args.grow)
@@ -122,7 +129,7 @@ load it when not `train`. \nTo stop training press `Ctrl-C`.",
         else:
             raise NotImplementedError(args.algo)
 
-        alg.train(args.load)
+        alg.train(args.episodes, args.load)
     else:
         ctrl = control.Control(game, env, epsilon=args.epsilon)
         ctrl.follow(delay=args.delay)
